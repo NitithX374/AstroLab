@@ -40,6 +40,7 @@ from astrolab.engine.simulator import SimulationEngine
 from astrolab.state.manager import StateManager
 from astrolab.physics import toolkit
 from astrolab.physics.integrators import INTEGRATORS
+from astrolab.viz.recorder import TrajectoryRecorder
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +123,7 @@ class AstroLabCLI(cmd.Cmd):
         super().__init__()
         self.manager   = state_manager or StateManager()
         self._engine   = SimulationEngine(self.manager.state)
+        self._recorder: Optional[TrajectoryRecorder] = None
 
     # ── create ───────────────────────────────────────────────────────────────
 
@@ -297,11 +299,11 @@ Display simulation state.
         """
         tokens = shlex.split(arg) if arg.strip() else []
         if not tokens:
-            print("  Usage: show state | body <name> | energy | integrators")
+            print("  Usage: show state | body <name> | energy | integrators | trajectory")
             return
-
+ 
         sub = tokens[0].lower()
-
+ 
         if sub == 'state':
             self._show_state()
         elif sub == 'body' and len(tokens) == 2:
@@ -310,8 +312,10 @@ Display simulation state.
             self._show_energy()
         elif sub == 'integrators':
             self._show_integrators()
+        elif sub == 'trajectory':
+            self._show_trajectory()
         else:
-            print("  Unknown. Try: show state | show body <name> | show energy | show integrators")
+            print("  Unknown. Try: show state | show body <name> | show energy | show integrators | show trajectory")
 
     def _show_state(self) -> None:
         bodies = self.manager.get_all_bodies()
@@ -372,6 +376,17 @@ Display simulation state.
         for name in INTEGRATORS:
             active = ' ◀ active' if name == self.manager.state.integrator else ''
             print(f"    {name:<8}  {desc.get(name, '')}{active}")
+        print()
+
+    def _show_trajectory(self) -> None:
+        if not self._recorder or self._recorder.snapshot_count() == 0:
+            print("  [i] No trajectory data recorded.  Use 'simulate ... visualize=on' to record.")
+            return
+        t0, tf = self._recorder.time_range()
+        print(f"\n  ┌─ Recorded Trajectory")
+        print(f"  │  Bodies     : {len(self._recorder.get_body_names())}")
+        print(f"  │  Snapshots  : {self._recorder.snapshot_count()}")
+        print(f"  └─ Time Range : {t0:.2e} s to {tf:.2e} s ({(tf-t0)/86400:.2f} days)")
         print()
 
     # ── set ──────────────────────────────────────────────────────────────────
@@ -441,6 +456,8 @@ Examples
             integrator   = kw.get('integrator', self.manager.state.integrator)
             collisions   = kw.get('collisions', 'on').lower() != 'off'
             log_interval = int(kw.get('log_energy', '0'))
+            viz_mode     = kw.get('visualize', 'off').lower()
+            output_file  = kw.get('output')
         except ValueError as exc:
             print(f"  [!] Parse error: {exc}")
             return
@@ -476,11 +493,36 @@ Examples
                 print(f"\r  [{bar}] {pct:3d}%", end='', flush=True)
                 last_pct[0] = pct
 
+        # Prepare recorder if requested
+        if viz_mode != 'off':
+            self._recorder = TrajectoryRecorder(record_every=1)
+        else:
+            self._recorder = None
+
+        if viz_mode == 'live':
+            try:
+                from astrolab.viz.vispy_viz import AstroLabLive
+                viewer = AstroLabLive(
+                    state=self.manager.state,
+                    engine=self._engine,
+                    total_steps=steps,
+                    recorder=self._recorder
+                )
+                print("  [*] Launching live visualizer...")
+                viewer.run()
+                # Live mode completes when window closes
+                print(f"\n  [+] Live simulation closed.")
+            except ImportError as exc:
+                print(f"\n  [!] Could not start live view: {exc}")
+                print("      Install dependencies: pip install vispy pyqt5")
+            return
+
         result = self._engine.run_with_monitor(
             steps=steps,
             collision_detection=collisions,
             energy_interval=log_interval,
             progress_callback=on_progress,
+            recorder=self._recorder
         )
 
         # Final bar fill-in and summary
@@ -499,6 +541,16 @@ Examples
             ef = result.energy_log[-1]['total']
             drift = abs((ef - e0) / e0) * 100 if e0 != 0.0 else 0.0
             print(f"\n  Energy Monitor: E₀={e0:+.4e} J  |  Ef={ef:+.4e} J  |  drift={drift:.4f}%")
+ 
+        if viz_mode == 'on' and output_file and self._recorder:
+            if output_file.endswith('.html'):
+                try:
+                    from astrolab.viz.plotly_viz import render_html
+                    render_html(self._recorder, output_file)
+                except ImportError as exc:
+                    print(f"  [!] Could not render HTML: {exc}")
+            else:
+                print(f"  [!] Automatic render only supports .html output. Use 'visualize' for other options.")
 
         print()
 
@@ -600,9 +652,77 @@ Run astrophysics toolkit calculations.
             print()
 
         else:
-            print(f"  [!] Unknown subcommand '{sub}'.")
             print("  Available: escape_velocity | orbital_period | grav_force | "
-                  "energy | schwarzschild | lagrange")
+                   "energy | schwarzschild | lagrange")
+ 
+    # ── visualize ────────────────────────────────────────────────────────────
+ 
+    def do_visualize(self, arg: str) -> None:
+        """
+View the recorded trajectory of the last simulation.
+ 
+  visualize orbits   [type=interactive|replay] [output=<file>]
+  visualize trajectory load=<path>  — Load recording from JSON
+  visualize trajectory save=<path>  — Save recording to JSON
+ 
+Types
+  interactive : Renders a 3D Plotly HTML chart (default).
+  replay      : Opens a Vispy OpenGL replay window.
+ 
+Examples
+  visualize orbits type=interactive output=orbits.html
+  visualize orbits type=replay
+  visualize trajectory save=my_run.json
+        """
+        tokens = shlex.split(arg)
+        if not tokens:
+            print("  Usage: visualize orbits | trajectory [...]")
+            return
+ 
+        sub = tokens[0].lower()
+        try:
+            kw = parse_kwargs(tokens[1:]) if len(tokens) > 1 else {}
+        except ValueError as exc:
+            print(f"  [!] {exc}"); return
+ 
+        if sub == 'trajectory':
+            if 'save' in kw:
+                if not self._recorder:
+                    print("  [!] No trajectory to save."); return
+                self._recorder.save(kw['save'])
+                print(f"  [+] Trajectory saved to '{kw['save']}'")
+            elif 'load' in kw:
+                self._recorder = TrajectoryRecorder.load(kw['load'])
+                print(f"  [+] Trajectory loaded from '{kw['load']}'")
+            return
+ 
+        if sub != 'orbits':
+            print(f"  [!] Unknown subcommand '{sub}'. Try: orbits | trajectory")
+            return
+ 
+        if not self._recorder or self._recorder.snapshot_count() == 0:
+            print("  [!] No trajectory data. Run a simulation with 'visualize=on' first.")
+            return
+ 
+        viz_type = kw.get('type', 'interactive').lower()
+        output   = kw.get('output', 'orbits.html')
+ 
+        if viz_type == 'interactive':
+            try:
+                from astrolab.viz.plotly_viz import render_html
+                render_html(self._recorder, output)
+            except ImportError as exc:
+                print(f"  [!] Error: {exc}")
+        elif viz_type == 'replay':
+            try:
+                from astrolab.viz.vispy_viz import AstroLabReplay
+                viewer = AstroLabReplay(self._recorder)
+                print("  [*] Opening replay window...")
+                viewer.run()
+            except ImportError as exc:
+                print(f"  [!] Error: {exc}")
+        else:
+            print(f"  [!] Unknown type '{viz_type}'. Use: interactive | replay")
 
     # ── export / import ──────────────────────────────────────────────────────
 

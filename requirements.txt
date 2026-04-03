@@ -1,11 +1,16 @@
 # AstroLab CLI — Runtime Dependencies
-# No external packages needed for Phase 1 & 2 core.
-# Optional packages listed below for advanced features.
-
+# No external packages needed for core simulation.
+ 
 # Core simulation — uses Python stdlib only (math, dataclasses, json, cmd)
-
-# ── Optional (Phase 3+) ─────────────────────────────────────────────
-# matplotlib        # 2D visualization hook: plot orbit <body>
-# numpy             # Faster numerical arrays (can replace Vector3D internals)
-# astropy           # Unit handling and coordinate transforms
-# rich              # Enhanced terminal formatting (tables, progress bars)
+ 
+# ── Optional: Visualization ─────────────────────────────────────────
+# Install these for the 'visualize' command and 'simulate visualize=...'
+plotly              # 3D interactive HTML orbit charts
+vispy               # Real-time OpenGL 3D visualization
+pyqt5               # Qt backend for Vispy (Windows/Linux)
+# pyopengl          # Required on some systems for OpenGL support
+ 
+# ── Other Optional ──────────────────────────────────────────────────
+# numpy             # Optimization (future)
+# astropy           # Advanced units (future)
+# rich              # Terminal formatting (future)

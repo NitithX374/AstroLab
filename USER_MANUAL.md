@@ -738,8 +738,62 @@ export state file=after_1yr.json
 ```
 
 ---
-
-## 11. Troubleshooting
+ 
+## 11. Visualization
+ 
+AstroLab CLI features 3D interactive and real-time visualization tools.
+ 
+### 11.1 How to Record & View Orbits
+ 
+Visualization works by recording "snapshots" of the simulation. You can do this at the same time as a simulation or render a previously saved recording.
+ 
+#### Automatic Render (Plotly)
+To automatically generate an interactive 3D HTML chart after a simulation:
+```bash
+simulate dt=3600 steps=8760 visualize=on output=my_orbits.html
+```
+Open `my_orbits.html` in any web browser to rotate, zoom, and see body telemetry by hovering.
+ 
+#### Live Real-Time (Vispy)
+To watch the simulation happen in a live OpenGL window:
+```bash
+simulate dt=3600 steps=8760 visualize=live
+```
+*Note: This requires a graphical environment.*
+ 
+### 11.2 The `visualize` Command
+ 
+Use `visualize` to replay the last simulation or render a different format.
+ 
+| Option | Description |
+|---|---|
+| `interactive` | Renders a 3D Plotly HTML chart (default). |
+| `replay` | Opens the 3D Vispy OpenGL replay window. |
+ 
+**Examples:**
+```bash
+# Render last run to a specific file
+visualize orbits type=interactive output=earth_sun.html
+ 
+# Replay last run in a window
+visualize orbits type=replay
+```
+ 
+### 11.3 Controls (Vispy Window)
+ 
+When using `visualize=live` or `type=replay`:
+ 
+- **SPACE** : Pause / Resume
+- **R** : Rewind to start (Replay) / Restart sim (Live)
+- **+ / -** : Speed up / Slow down playback
+- **Scroll** : Zoom
+- **Left-drag** : Orbit camera
+- **Right-drag** : Pan camera
+- **Q / ESC** : Close window
+ 
+---
+ 
+## 12. Troubleshooting
 
 ### "Body 'X' not found"
 The name you typed doesn't match any body in the simulation. Use `show state` to see the exact names of all bodies.

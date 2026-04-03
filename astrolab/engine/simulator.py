@@ -27,12 +27,15 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
 from astrolab.core.models import CelestialBody, SimulationState, Vector3D
 from astrolab.physics.gravity import compute_accelerations
 from astrolab.physics.integrators import BaseIntegrator, get_integrator
 from astrolab.physics.toolkit import total_system_energy
+
+if TYPE_CHECKING:
+    from astrolab.viz.recorder import TrajectoryRecorder
 
 
 # ---------------------------------------------------------------------------
@@ -162,9 +165,11 @@ class SimulationEngine:
         collision_detection: bool = True,
         energy_interval: int = 0,
         progress_callback: Optional[Callable[[int, int], None]] = None,
+        recorder: Optional['TrajectoryRecorder'] = None,
     ) -> RunResult:
         """
-        Run the simulation with optional energy monitoring and progress reporting.
+        Run the simulation with optional energy monitoring, progress reporting,
+        and trajectory recording.
 
         Parameters
         ----------
@@ -173,6 +178,9 @@ class SimulationEngine:
         energy_interval     : int   Log energy every N steps (0 = disabled).
         progress_callback   : callable(current_step, total_steps)
                               Called after each step for progress reporting.
+        recorder            : TrajectoryRecorder | None
+                              If supplied, ``recorder.record()`` is called after
+                              each step to collect trajectory data.
 
         Returns
         -------
@@ -194,6 +202,9 @@ class SimulationEngine:
                     'time': self.state.time,
                     **e,
                 })
+
+            if recorder is not None:
+                recorder.record(self.state.bodies, self.state.time)
 
             if progress_callback is not None:
                 progress_callback(s + 1, steps)
