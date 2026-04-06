@@ -12,7 +12,8 @@ edit body <name> [key=val ...]   — Update fields of an existing body
 show state | body <n> | energy | integrators
 simulate dt=<s> steps=<n> [integrator=rk4] [collisions=on] [log_energy=<n>]
 compute escape_velocity | orbital_period | grav_force | energy |
-        schwarzschild | lagrange
+        schwarzschild | lagrange | photon_sphere | isco | redshift | timedilation
+blackhole create | info | geodesic | shadow | potential | lensing | redshift | timedilation
 set dt=<s> | integrator=<name>    — Adjust simulation parameters
 export state file=<path>          — Save state to JSON
 import state file=<path>          — Load state from JSON
@@ -99,7 +100,7 @@ BANNER = r"""
   ██║  ██║███████║   ██║   ██║  ██║╚██████╔╝███████╗██║  ██║██████╔╝
   ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ 
 
-  AstroLab CLI  v2.2.0  |  N-Body Astrophysics Simulation
+   AstroLab CLI  v3.0.0  |  N-Body & General Relativity Simulation
   ─────────────────────────────────────────────────────────
   Type  help         to list commands
         help create  for detailed usage of a specific command
@@ -126,6 +127,8 @@ class AstroLabCLI(cmd.Cmd):
         self.manager   = state_manager or StateManager()
         self._engine   = SimulationEngine(self.manager.state)
         self._recorder: Optional[TrajectoryRecorder] = None
+        self._gr_engine = None   # Lazy-loaded GR engine
+        self._bh_config = None   # Current black hole configuration
 
     # ── create ───────────────────────────────────────────────────────────────
 
@@ -298,6 +301,7 @@ Display simulation state.
   show body <name>        — Detailed view of a single body
   show energy             — KE / PE / total energy of the system
   show integrators        — List available numerical integrators
+  show trajectory         — Summary of recorded trajectory data
         """
         tokens = shlex.split(arg) if arg.strip() else []
         if not tokens:
@@ -562,12 +566,26 @@ Examples
         """
 Run astrophysics toolkit calculations.
 
+Newtonian
   compute escape_velocity  body=<name>
   compute orbital_period   body=<name>   primary=<primary>
   compute grav_force       body1=<name>  body2=<name>
   compute energy
   compute schwarzschild    body=<name>
   compute lagrange         primary=<name> secondary=<name>
+
+General Relativity
+  compute photon_sphere    body=<name>
+  compute isco             body=<name>  [spin=<a/M>]
+  compute redshift         body=<name>  r_emit=<m>  r_obs=<m>
+  compute timedilation     body=<name>  r=<m>
+
+Examples
+  compute escape_velocity body=earth
+  compute photon_sphere body=sun
+  compute isco body=sun spin=0.5
+  compute redshift body=sun r_emit=5000 r_obs=1e12
+  compute timedilation body=sun r=10000
         """
         tokens = shlex.split(arg)
         if not tokens:
@@ -653,9 +671,60 @@ Run astrophysics toolkit calculations.
                 print(f"  {lbl:<6} {str(pos):<44} {d:.4e} m")
             print()
 
+        elif sub == 'photon_sphere':
+            b = self._get_body(kw.get('body'))
+            if not b: return
+            rph = toolkit.photon_sphere_radius(b)
+            rs  = toolkit.schwarzschild_radius(b)
+            print(f"\n  Photon sphere of '{b.name}': {rph:.4e} m  ({rph / 1e3:.4f} km)")
+            print(f"    = 1.5 × Schwarzschild radius ({rs:.4e} m)")
+            print()
+
+        elif sub == 'isco':
+            b = self._get_body(kw.get('body'))
+            if not b: return
+            spin = float(kw.get('spin', '0'))
+            r_isco = toolkit.isco_radius(b, spin=spin)
+            print(f"\n  ISCO of '{b.name}' (spin={spin}): {r_isco:.4e} m  ({r_isco / 1e3:.4f} km)")
+            if spin == 0:
+                print(f"    = 3 × Schwarzschild radius")
+            print()
+
+        elif sub == 'redshift':
+            b = self._get_body(kw.get('body'))
+            if not b: return
+            r_emit = parse_scalar(kw.get('r_emit', '0'))
+            r_obs  = parse_scalar(kw.get('r_obs', '0'))
+            if r_emit <= 0 or r_obs <= 0:
+                print("  [!] Both r_emit and r_obs are required and must be > 0.")
+                return
+            rs_data = toolkit.gravitational_redshift_at(r_emit, r_obs, b)
+            print(f"\n  Gravitational Redshift")
+            print(f"    Emitter at  : {r_emit:.4e} m")
+            print(f"    Observer at : {r_obs:.4e} m")
+            print(f"    Redshift z  : {rs_data['z']:.6f}")
+            print(f"    λ_obs/λ_emit: {rs_data['wavelength_ratio']:.6f}")
+            print(f"    f_obs/f_emit: {rs_data['frequency_ratio']:.6f}")
+            print()
+
+        elif sub == 'timedilation':
+            b = self._get_body(kw.get('body'))
+            if not b: return
+            r = parse_scalar(kw.get('r', '0'))
+            if r <= 0:
+                print("  [!] 'r' is required and must be > 0."); return
+            factor = toolkit.time_dilation_factor(r, b)
+            print(f"\n  Time Dilation at r={r:.4e} m from '{b.name}'")
+            print(f"    dτ/dt = {factor:.8f}")
+            print(f"    Clock runs at {factor * 100:.4f}% of distant clock rate")
+            if factor > 0:
+                print(f"    1 hour local = {3600.0 / factor:.4f} s distant")
+            print()
+
         else:
             print("  Available: escape_velocity | orbital_period | grav_force | "
-                   "energy | schwarzschild | lagrange")
+                   "energy | schwarzschild | lagrange | photon_sphere | isco | "
+                   "redshift | timedilation")
  
     # ── visualize ────────────────────────────────────────────────────────────
  
@@ -802,6 +871,336 @@ Execute commands from a batch script file.
                 continue
             print(f"\n  [script:{lineno}] {line}")
             self.onecmd(line)
+
+    # ── blackhole ─────────────────────────────────────────────────────────────
+
+    def do_blackhole(self, arg: str) -> None:
+        """
+General-relativistic black hole simulation.
+
+  blackhole create   mass=<kg> [spin=<a/M>] [metric=schwarzschild|kerr]
+  blackhole info
+  blackhole geodesic type=timelike|null r=<r_M> [theta=<rad>] [phi=<rad>]
+                     [ur=<val>] [utheta=<val>] [uphi=<val>]
+                     [steps=<N>] [affine=<max_lambda>]
+  blackhole lensing  impact=<b_M>
+  blackhole redshift r_emit=<rM> r_obs=<rM>
+  blackhole timedilation r=<rM> [v=<frac_c>]
+  blackhole potential L=<L_M> [E=<E>] [type=timelike|null]
+  blackhole shadow   [rays=<N>]
+
+  Coordinates are in units of M (geometric mass of the black hole).
+  r=10 means 10×M from the singularity.
+
+Examples
+  blackhole create mass=1.989e30
+  blackhole create mass=4.3e6 spin=0.998 metric=kerr
+  blackhole info
+  blackhole geodesic type=timelike r=10 uphi=0.02
+  blackhole geodesic type=null r=50 ur=-1 uphi=0.1
+  blackhole lensing impact=5.5
+  blackhole redshift r_emit=3 r_obs=100
+  blackhole timedilation r=2.5
+  blackhole potential L=4 type=timelike
+        """
+        tokens = shlex.split(arg)
+        if not tokens:
+            print("  Usage: blackhole create | info | geodesic | lensing | "
+                  "redshift | timedilation | potential | shadow")
+            return
+
+        sub = tokens[0].lower()
+        try:
+            kw = parse_kwargs(tokens[1:]) if len(tokens) > 1 else {}
+        except ValueError as exc:
+            print(f"  [!] {exc}")
+            return
+
+        if sub == 'create':
+            self._bh_create(kw)
+        elif sub == 'info':
+            self._bh_info()
+        elif sub == 'geodesic':
+            self._bh_geodesic(kw)
+        elif sub == 'lensing':
+            self._bh_lensing(kw)
+        elif sub == 'redshift':
+            self._bh_redshift(kw)
+        elif sub == 'timedilation':
+            self._bh_timedilation(kw)
+        elif sub == 'potential':
+            self._bh_potential(kw)
+        elif sub == 'shadow':
+            self._bh_shadow(kw)
+        else:
+            print(f"  [!] Unknown subcommand '{sub}'.")
+            print("  Available: create | info | geodesic | lensing | "
+                  "redshift | timedilation | potential | shadow")
+
+    def _ensure_gr_engine(self) -> bool:
+        """Check that a GR engine is initialized."""
+        if self._gr_engine is None:
+            print("  [!] No black hole configured.  Use 'blackhole create' first.")
+            return False
+        return True
+
+    def _bh_create(self, kw: dict) -> None:
+        if 'mass' not in kw:
+            print("  [!] 'mass' is required (in kg).")
+            print("  Example: blackhole create mass=1.989e30")
+            return
+
+        try:
+            from astrolab.engine.gr_engine import GRSimulationEngine, BlackHoleConfig
+            from astrolab.physics.metrics import create_metric
+
+            mass_kg = parse_scalar(kw['mass'])
+            spin = float(kw.get('spin', '0'))
+            metric_type = kw.get('metric', 'schwarzschild' if spin == 0 else 'kerr').lower()
+
+            if spin > 0 and metric_type == 'schwarzschild':
+                metric_type = 'kerr'
+                print("  [i] Spin > 0 detected — switching to Kerr metric.")
+
+            config = BlackHoleConfig(
+                mass_kg=mass_kg,
+                spin=spin,
+                metric_type=metric_type,
+            )
+
+            self._bh_config = config
+            self._gr_engine = GRSimulationEngine.from_config(config)
+
+            print(f"\n  [+] Black hole created ({metric_type.upper()} metric)")
+            print(f"      Mass = {mass_kg:.4e} kg  ({mass_kg / 1.989e30:.4f} M☉)")
+            print(f"      M_geom = {config.mass_geometric:.4e} m")
+            if spin > 0:
+                print(f"      Spin a/M = {spin:.4f}")
+            print(f"      Schwarzschild radius = {config.schwarzschild_radius_km:.4f} km")
+            print()
+
+        except Exception as exc:
+            print(f"  [!] Failed to create black hole: {exc}")
+
+    def _bh_info(self) -> None:
+        if not self._ensure_gr_engine():
+            return
+        print(self._gr_engine.format_info())
+        print()
+
+    def _bh_geodesic(self, kw: dict) -> None:
+        if not self._ensure_gr_engine():
+            return
+
+        try:
+            import math as _math
+
+            ptype = kw.get('type', 'timelike').lower()
+            r = float(kw.get('r', '10'))
+            theta = float(kw.get('theta', str(_math.pi / 2)))
+            phi = float(kw.get('phi', '0'))
+            ur = float(kw.get('ur', '0'))
+            utheta = float(kw.get('utheta', '0'))
+            uphi = float(kw.get('uphi', '0.02'))
+            max_steps = int(kw.get('steps', '50000'))
+            max_affine = float(kw.get('affine', '500'))
+
+            if r <= self._gr_engine.metric.event_horizon()[0] / self._gr_engine.M:
+                print(f"  [!] Starting radius r={r}M is inside the event horizon. "
+                      f"Must be > {self._gr_engine.metric.event_horizon()[0] / self._gr_engine.M:.2f}M.")
+                return
+
+            print(f"\n  Tracing {ptype} geodesic...")
+            print(f"    r₀ = {r}M,  θ₀ = {theta:.4f},  φ₀ = {phi:.4f}")
+            print(f"    u^r = {ur},  u^θ = {utheta},  u^φ = {uphi}")
+            print(f"    Max steps: {max_steps:,},  Max λ: {max_affine}M")
+            print()
+
+            result = self._gr_engine.trace_geodesic(
+                r=r, theta=theta, phi=phi,
+                ur=ur, utheta=utheta, uphi=uphi,
+                particle_type=ptype,
+                max_steps=max_steps,
+                max_affine=max_affine,
+            )
+
+            # Print results
+            M = self._gr_engine.M
+            print(f"  ┌─ Geodesic Result")
+            print(f"  │  Termination    : {result.termination_reason.value}")
+            print(f"  │  Steps taken    : {result.steps_taken:,}")
+            print(f"  │  Trajectory pts : {len(result.trajectory)}")
+            print(f"  │  Coord. time    : {result.coordinate_time / M:.4f} M")
+            if ptype == 'timelike':
+                print(f"  │  Proper time    : {result.proper_time / M:.4f} M")
+            print(f"  │")
+            print(f"  │  ── Orbital Parameters ──")
+            print(f"  │  r_min (periapsis)  : {result.orbital_params.get('r_min', 0) / M:.4f} M")
+            print(f"  │  r_max (apoapsis)   : {result.orbital_params.get('r_max', 0) / M:.4f} M")
+            print(f"  │  Total Δφ           : {result.orbital_params.get('total_delta_phi', 0):.4f} rad  "
+                  f"({_math.degrees(result.orbital_params.get('total_delta_phi', 0)):.2f}°)")
+            if 'precession_per_orbit' in result.orbital_params:
+                prec = result.orbital_params['precession_per_orbit']
+                print(f"  │  Precession/orbit   : {prec:.6f} rad  "
+                      f"({_math.degrees(prec) * 3600:.2f} arcsec)")
+            print(f"  │")
+            print(f"  │  ── Constants of Motion ──")
+            ci = result.constants_initial
+            cf = result.constants_final
+            print(f"  │  E (initial)  : {ci.get('E', 0):+.8f}")
+            print(f"  │  E (final)    : {cf.get('E', 0):+.8f}  "
+                  f"(drift: {abs(ci.get('E', 0) - cf.get('E', 0)):.2e})")
+            print(f"  │  L (initial)  : {ci.get('L', 0):+.8f}")
+            print(f"  │  L (final)    : {cf.get('L', 0):+.8f}  "
+                  f"(drift: {abs(ci.get('L', 0) - cf.get('L', 0)):.2e})")
+
+            if result.events:
+                print(f"  │")
+                print(f"  │  ── Events ({len(result.events)}) ──")
+                for ev in result.events[:15]:  # Cap display at 15 events
+                    print(f"  │  λ={ev.affine_param/M:.4f}M  r={ev.r/M:.4f}M  {ev.description}")
+                if len(result.events) > 15:
+                    print(f"  │  ... and {len(result.events) - 15} more events")
+
+            print(f"  └─")
+            print()
+
+        except Exception as exc:
+            print(f"  [!] Geodesic trace failed: {exc}")
+            import traceback
+            traceback.print_exc()
+
+    def _bh_lensing(self, kw: dict) -> None:
+        if not self._ensure_gr_engine():
+            return
+
+        impact = float(kw.get('impact', kw.get('b', '5.196')))
+        result = self._gr_engine.compute_lensing(impact)
+
+        import math as _math
+        print(f"\n  ┌─ Gravitational Lensing")
+        print(f"  │  Impact parameter   : {result['impact_parameter_M']:.4f} M")
+        print(f"  │  Critical b         : {result['critical_impact_parameter_M']:.4f} M")
+        print(f"  │  Captured?          : {'YES — falls into BH' if result['captured'] else 'NO — deflected'}")
+        print(f"  │  Weak-field deflect.: {result['weak_field_deflection_deg']:.4f}°  "
+              f"({result['weak_field_deflection_rad']:.6f} rad)")
+        if not result['captured']:
+            einstein = 4.0 / impact  # 4M/b in units where we already divide by M
+            print(f"  │  Einstein prediction: {_math.degrees(einstein):.4f}°  (4M/b)")
+        print(f"  └─")
+        print()
+
+    def _bh_redshift(self, kw: dict) -> None:
+        if not self._ensure_gr_engine():
+            return
+
+        r_emit = float(kw.get('r_emit', '3'))
+        r_obs = float(kw.get('r_obs', '1000'))
+
+        result = self._gr_engine.compute_redshift(r_emit, r_obs)
+
+        print(f"\n  ┌─ Gravitational Redshift")
+        print(f"  │  Emitter at   : {r_emit} M")
+        print(f"  │  Observer at  : {r_obs} M")
+        print(f"  │  Redshift z   : {result.get('z', float('inf')):.8f}")
+        print(f"  │  λ_obs/λ_emit : {result.get('wavelength_ratio', 0):.8f}")
+        print(f"  │  f_obs/f_emit : {result.get('frequency_ratio', 0):.8f}")
+        if result.get('z', 0) > 0:
+            print(f"  │  A 500nm photon → {500.0 * result.get('wavelength_ratio', 1):.1f}nm")
+        print(f"  └─")
+        print()
+
+    def _bh_timedilation(self, kw: dict) -> None:
+        if not self._ensure_gr_engine():
+            return
+
+        r = float(kw.get('r', '3'))
+        v = float(kw.get('v', '0'))
+
+        result = self._gr_engine.compute_time_dilation(r, v_tangential=v)
+
+        print(f"\n  ┌─ Gravitational Time Dilation")
+        print(f"  │  Position     : {r} M from singularity")
+        if v > 0:
+            print(f"  │  Velocity     : {v:.4f} c (tangential)")
+        print(f"  │  dτ/dt        : {result['factor']:.10f}")
+        print(f"  │  Clock rate   : {result['clock_rate_percent']:.6f}% of distant clock")
+        if result['factor'] > 0:
+            hrs = result['one_hour_local_equals_s'] / 3600.0
+            print(f"  │  1 hour here  = {hrs:.6f} hours for distant observer")
+        else:
+            print(f"  │  Time is frozen at the event horizon")
+        print(f"  └─")
+        print()
+
+    def _bh_potential(self, kw: dict) -> None:
+        if not self._ensure_gr_engine():
+            return
+
+        L = float(kw.get('l', kw.get('L', '4')))
+        E = float(kw.get('e', kw.get('E', '1')))
+        ptype = kw.get('type', 'timelike').lower()
+        r_min = float(kw.get('r_min', '2.5'))
+        r_max = float(kw.get('r_max', '30'))
+
+        r_arr, V_arr = self._gr_engine.compute_effective_potential(
+            L=L, E=E, r_min=r_min, r_max=r_max,
+            particle_type=ptype,
+        )
+
+        print(f"\n  ┌─ Effective Potential ({ptype})")
+        print(f"  │  Angular momentum L = {L} M")
+        print(f"  │  Energy E = {E}")
+        print(f"  │")
+        print(f"  │  {'r/M':<10} {'V_eff':<20}")
+        print(f"  │  {'─' * 30}")
+
+        # Print sampled points
+        step = max(1, len(r_arr) // 20)
+        for i in range(0, len(r_arr), step):
+            print(f"  │  {r_arr[i]:<10.2f} {V_arr[i]:<20.8f}")
+
+        # Find extrema (potential barrier, well)
+        import numpy as _np
+        dV = _np.diff(V_arr)
+        sign_changes = _np.where(_np.diff(_np.sign(dV)))[0]
+        if len(sign_changes) > 0:
+            print(f"  │")
+            print(f"  │  ── Critical Points ──")
+            for idx in sign_changes:
+                cp_type = "maximum (unstable)" if V_arr[idx+1] > V_arr[idx] else "minimum (stable)"
+                print(f"  │  r = {r_arr[idx+1]:.4f} M  V = {V_arr[idx+1]:.8f}  ({cp_type})")
+
+        print(f"  └─")
+        print()
+
+    def _bh_shadow(self, kw: dict) -> None:
+        if not self._ensure_gr_engine():
+            return
+
+        n_rays = int(kw.get('rays', '36'))
+
+        boundary = self._gr_engine.compute_shadow_boundary(n_points=n_rays)
+
+        from astrolab.physics.observables import critical_impact_parameter
+        b_crit = critical_impact_parameter(self._gr_engine.metric) / self._gr_engine.M
+
+        print(f"\n  ┌─ Black Hole Shadow")
+        print(f"  │  Shadow radius  : {b_crit:.4f} M  (critical impact parameter)")
+        print(f"  │  Boundary pts   : {len(boundary)}")
+        if self._gr_engine.metric.spin > 0:
+            print(f"  │  Shape          : Asymmetric (Kerr, spin={self._gr_engine.metric.spin:.4f})")
+        else:
+            print(f"  │  Shape          : Circular (Schwarzschild)")
+        print(f"  │")
+        print(f"  │  {'α (M)':<12} {'β (M)':<12}")
+        print(f"  │  {'─' * 24}")
+        step = max(1, len(boundary) // 12)
+        for i in range(0, len(boundary), step):
+            alpha, beta = boundary[i]
+            print(f"  │  {alpha:<12.4f} {beta:<12.4f}")
+        print(f"  └─")
+        print()
 
     # ── exit ─────────────────────────────────────────────────────────────────
 

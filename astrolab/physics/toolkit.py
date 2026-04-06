@@ -153,3 +153,103 @@ def lagrange_points(primary: CelestialBody, secondary: CelestialBody) -> Dict[st
     L5 = primary.position + u * (d / 2.0) - u_perp * (d * math.sqrt(3) / 2.0)
 
     return {'L1': L1, 'L2': L2, 'L3': L3, 'L4': L4, 'L5': L5}
+
+
+# ---------------------------------------------------------------------------
+# General Relativity — Quick Toolkit Functions
+# ---------------------------------------------------------------------------
+
+def photon_sphere_radius(body: CelestialBody) -> float:
+    """
+    Compute the photon sphere radius for a non-rotating black hole.
+    r_ph = 3 * G * M / c^2 = 1.5 * r_s
+    Returns: photon sphere radius in metres
+    """
+    return 3.0 * G * body.mass / C**2
+
+
+def isco_radius(body: CelestialBody, spin: float = 0.0) -> float:
+    """
+    Compute the innermost stable circular orbit (ISCO) radius.
+
+    For Schwarzschild (spin=0): r_isco = 6 * G * M / c^2  = 3 * r_s
+    For Kerr (spin>0):          Uses the Bardeen-Press-Teukolsky formula.
+
+    Parameters
+    ----------
+    body : CelestialBody   The central mass.
+    spin : float            Dimensionless spin a/M ∈ [0, 1).  Default: 0.
+
+    Returns: ISCO radius in metres
+    """
+    M_geom = G * body.mass / C**2
+
+    if abs(spin) < 1e-10:
+        return 6.0 * M_geom  # Schwarzschild ISCO
+
+    # Kerr ISCO (prograde)
+    chi = spin
+    z1 = 1.0 + (1.0 - chi**2)**(1.0/3.0) * (
+        (1.0 + chi)**(1.0/3.0) + (1.0 - chi)**(1.0/3.0)
+    )
+    z2 = math.sqrt(3.0 * chi**2 + z1**2)
+    return M_geom * (3.0 + z2 - math.sqrt((3.0 - z1) * (3.0 + z1 + 2.0*z2)))
+
+
+def gravitational_redshift_at(
+    r_emit: float,
+    r_obs: float,
+    body: CelestialBody,
+) -> Dict[str, float]:
+    """
+    Compute gravitational redshift between two radial positions
+    around a Schwarzschild black hole.
+
+    1 + z = sqrt((1 − r_s/r_obs) / (1 − r_s/r_emit))
+
+    Parameters
+    ----------
+    r_emit : float  Emission radius in metres
+    r_obs  : float  Observer radius in metres
+    body   : CelestialBody  Central mass
+
+    Returns: dict with 'z', 'wavelength_ratio', 'frequency_ratio'
+    """
+    rs = schwarzschild_radius(body)
+
+    if r_emit <= rs or r_obs <= rs:
+        return {
+            'z': float('inf'),
+            'wavelength_ratio': float('inf'),
+            'frequency_ratio': 0.0,
+        }
+
+    one_plus_z = math.sqrt((1.0 - rs / r_obs) / (1.0 - rs / r_emit))
+    z = one_plus_z - 1.0
+
+    return {
+        'z': z,
+        'wavelength_ratio': one_plus_z,
+        'frequency_ratio': 1.0 / one_plus_z,
+    }
+
+
+def time_dilation_factor(r: float, body: CelestialBody) -> float:
+    """
+    Gravitational time dilation factor for a static observer at radius r
+    around a Schwarzschild black hole.
+
+    dτ/dt = sqrt(1 − r_s / r)
+
+    Parameters
+    ----------
+    r    : float  Radial coordinate in metres
+    body : CelestialBody  Central mass
+
+    Returns: time dilation factor (0 at horizon, 1 at infinity)
+    """
+    rs = schwarzschild_radius(body)
+    if r <= rs:
+        return 0.0
+    return math.sqrt(1.0 - rs / r)
+

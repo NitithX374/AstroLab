@@ -1,7 +1,9 @@
 # AstroLab CLI — Runtime Dependencies
-# No external packages needed for core simulation.
  
 # Core simulation — uses Python stdlib only (math, dataclasses, json, cmd)
+ 
+# ── Required: General Relativity Module ─────────────────────────────
+numpy               # Matrix operations for metric tensors, Christoffel symbols
  
 # ── Optional: Visualization ─────────────────────────────────────────
 # Install these for the 'visualize' command and 'simulate visualize=...'
@@ -11,6 +13,5 @@ pyqt5               # Qt backend for Vispy (Windows/Linux)
 # pyopengl          # Required on some systems for OpenGL support
  
 # ── Other Optional ──────────────────────────────────────────────────
-# numpy             # Optimization (future)
 # astropy           # Advanced units (future)
 # rich              # Terminal formatting (future)

@@ -276,3 +276,70 @@ class SimulationState:
             f"time={days:.2f} days, step={self.step}, dt={self.dt}s, "
             f"integrator={self.integrator!r})"
         )
+
+
+# ---------------------------------------------------------------------------
+# GeodesicTrajectory  (General Relativity)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class GeodesicTrajectoryPoint:
+    """
+    A single point on a geodesic in curved spacetime.
+
+    Stores Boyer-Lindquist coordinates (t, r, θ, φ) and the corresponding
+    4-velocity components, along with diagnostics.
+    """
+    affine_param: float          # Affine parameter λ
+    t:            float          # Coordinate time
+    r:            float          # Radial coordinate (geometric units)
+    theta:        float          # Polar angle [rad]
+    phi:          float          # Azimuthal angle [rad]
+    ut:           float = 0.0   # dt/dλ
+    ur:           float = 0.0   # dr/dλ
+    utheta:       float = 0.0   # dθ/dλ
+    uphi:         float = 0.0   # dφ/dλ
+    proper_time:  float = 0.0   # Accumulated proper time
+    norm:         float = 0.0   # g_μν u^μ u^ν (diagnostic)
+
+    @property
+    def x(self) -> float:
+        """Cartesian x = r sinθ cosφ"""
+        return self.r * math.sin(self.theta) * math.cos(self.phi)
+
+    @property
+    def y(self) -> float:
+        """Cartesian y = r sinθ sinφ"""
+        return self.r * math.sin(self.theta) * math.sin(self.phi)
+
+    @property
+    def z(self) -> float:
+        """Cartesian z = r cosθ"""
+        return self.r * math.cos(self.theta)
+
+    def cartesian(self) -> Tuple[float, float, float]:
+        return (self.x, self.y, self.z)
+
+    def to_dict(self) -> Dict:
+        return {
+            'lambda': self.affine_param,
+            't': self.t, 'r': self.r, 'theta': self.theta, 'phi': self.phi,
+            'ut': self.ut, 'ur': self.ur, 'utheta': self.utheta, 'uphi': self.uphi,
+            'proper_time': self.proper_time, 'norm': self.norm,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict) -> 'GeodesicTrajectoryPoint':
+        return cls(
+            affine_param=data.get('lambda', 0.0),
+            t=data.get('t', 0.0),
+            r=data.get('r', 0.0),
+            theta=data.get('theta', math.pi / 2),
+            phi=data.get('phi', 0.0),
+            ut=data.get('ut', 0.0),
+            ur=data.get('ur', 0.0),
+            utheta=data.get('utheta', 0.0),
+            uphi=data.get('uphi', 0.0),
+            proper_time=data.get('proper_time', 0.0),
+            norm=data.get('norm', 0.0),
+        )
