@@ -13,5 +13,6 @@ pyqt5               # Qt backend for Vispy (Windows/Linux)
 # pyopengl          # Required on some systems for OpenGL support
  
 # ── Other Optional ──────────────────────────────────────────────────
+anthropic             # Generative AI explanations (Claude 4.5 Haiku)
 # astropy           # Advanced units (future)
 # rich              # Terminal formatting (future)

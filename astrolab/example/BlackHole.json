@@ -1,0 +1,93 @@
+{
+  "time": 0.0,
+  "dt": 60.0,
+  "step": 0,
+  "integrator": "rk4",
+  "bodies": [
+    {
+      "name": "bh",
+      "mass": 1.989e+31,
+      "position": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "radius": 30000.0,
+      "body_type": "black_hole",
+      "color": "black"
+    },
+    {
+      "name": "orbiter",
+      "mass": 1000.0,
+      "position": [
+        10000000000.0,
+        0.0,
+        0.0
+      ],
+      "velocity": [
+        0.0,
+        115000.0,
+        0.0
+      ],
+      "radius": 1000.0,
+      "body_type": "test",
+      "color": "green"
+    },
+    {
+      "name": "infall",
+      "mass": 1000.0,
+      "position": [
+        10000000000.0,
+        0.0,
+        0.0
+      ],
+      "velocity": [
+        0.0,
+        50000.0,
+        0.0
+      ],
+      "radius": 1000.0,
+      "body_type": "test",
+      "color": "red"
+    },
+    {
+      "name": "escape",
+      "mass": 1000.0,
+      "position": [
+        10000000000.0,
+        0.0,
+        0.0
+      ],
+      "velocity": [
+        0.0,
+        200000.0,
+        0.0
+      ],
+      "radius": 1000.0,
+      "body_type": "test",
+      "color": "blue"
+    },
+    {
+      "name": "plunge",
+      "mass": 1000.0,
+      "position": [
+        10000000000.0,
+        0.0,
+        0.0
+      ],
+      "velocity": [
+        -10000.0,
+        0.0,
+        0.0
+      ],
+      "radius": 1000.0,
+      "body_type": "test",
+      "color": "white"
+    }
+  ]
+}

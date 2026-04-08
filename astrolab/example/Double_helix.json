@@ -1,0 +1,42 @@
+{
+  "time": 0.0,
+  "dt": 60.0,
+  "step": 0,
+  "integrator": "rk4",
+  "bodies": [
+    {
+      "name": "B",
+      "mass": 5e+24,
+      "position": [
+        -50000000.0,
+        0.0,
+        0.0
+      ],
+      "velocity": [
+        0.0,
+        1000.0,
+        0.0
+      ],
+      "radius": 1000000.0,
+      "body_type": "planet",
+      "color": "magenta"
+    },
+    {
+      "name": "A",
+      "mass": 5e+24,
+      "position": [
+        50000000.0,
+        0.0,
+        0.0
+      ],
+      "velocity": [
+        0.0,
+        -1000.0,
+        0.0
+      ],
+      "radius": 1000000.0,
+      "body_type": "planet",
+      "color": "magenta"
+    }
+  ]
+}

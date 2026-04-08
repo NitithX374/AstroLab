@@ -13,7 +13,7 @@ show state | body <n> | energy | integrators
 simulate dt=<s> steps=<n> [integrator=rk4] [collisions=on] [log_energy=<n>]
 compute escape_velocity | orbital_period | grav_force | energy |
         schwarzschild | lagrange | photon_sphere | isco | redshift | timedilation
-blackhole create | info | geodesic | shadow | potential | lensing | redshift | timedilation
+ask <your question>               — General / context-aware AI inquiry
 set dt=<s> | integrator=<name>    — Adjust simulation parameters
 export state file=<path>          — Save state to JSON
 import state file=<path>          — Load state from JSON
@@ -42,6 +42,7 @@ from astrolab.state.manager import StateManager
 from astrolab.physics import toolkit
 from astrolab.physics.integrators import INTEGRATORS
 from astrolab.viz.recorder import TrajectoryRecorder
+from astrolab.ai.interpreter import AstroInterpreter
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +102,7 @@ BANNER = r"""
   ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ 
 
    AstroLab CLI  v3.0.0  |  N-Body & General Relativity Simulation
-  ─────────────────────────────────────────────────────────
+  ---------------------------------------------------------
   Type  help         to list commands
         help create  for detailed usage of a specific command
         exit         to quit
@@ -109,7 +110,7 @@ BANNER = r"""
 
 
 def _ruler(width: int = 80) -> str:
-    return '  ' + '─' * width
+    return '  ' + '-' * width
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +130,8 @@ class AstroLabCLI(cmd.Cmd):
         self._recorder: Optional[TrajectoryRecorder] = None
         self._gr_engine = None   # Lazy-loaded GR engine
         self._bh_config = None   # Current black hole configuration
+        self._last_result = None # Latest RunResult for AI context
+        self._last_compute = None # Latest computation for AI context (cmd, result, kwargs)
 
     # ── create ───────────────────────────────────────────────────────────────
 
@@ -302,10 +305,11 @@ Display simulation state.
   show energy             — KE / PE / total energy of the system
   show integrators        — List available numerical integrators
   show trajectory         — Summary of recorded trajectory data
+  show examples           — List available simulation examples
         """
         tokens = shlex.split(arg) if arg.strip() else []
         if not tokens:
-            print("  Usage: show state | body <name> | energy | integrators | trajectory")
+            print("  Usage: show state | body <name> | energy | integrators | trajectory | examples")
             return
  
         sub = tokens[0].lower()
@@ -320,8 +324,10 @@ Display simulation state.
             self._show_integrators()
         elif sub == 'trajectory':
             self._show_trajectory()
+        elif sub == 'examples':
+            self._show_examples()
         else:
-            print("  Unknown. Try: show state | show body <name> | show energy | show integrators | show trajectory")
+            print("  Unknown. Try: show state | show body <name> | show energy | show integrators | show trajectory | show examples")
 
     def _show_state(self) -> None:
         bodies = self.manager.get_all_bodies()
@@ -349,15 +355,15 @@ Display simulation state.
         speed = b.velocity.magnitude()
         dist  = b.position.magnitude()
         ke    = b.kinetic_energy()
-        print(f"\n  ┌─ {b.name}  ({b.body_type})")
-        print(f"  │  Mass         : {b.mass:.6e} kg")
-        print(f"  │  Radius       : {b.radius:.6g} m")
-        print(f"  │  Position     : {b.position}")
-        print(f"  │  |position|   : {dist:.4e} m")
-        print(f"  │  Velocity     : {b.velocity}")
-        print(f"  │  |velocity|   : {speed:.4e} m/s")
-        print(f"  │  KE           : {ke:.4e} J")
-        print(f"  └─ Color        : {b.color}")
+        print(f"\n  +- {b.name}  ({b.body_type})")
+        print(f"  |  Mass         : {b.mass:.6e} kg")
+        print(f"  |  Radius       : {b.radius:.6g} m")
+        print(f"  |  Position     : {b.position}")
+        print(f"  |  |position|   : {dist:.4e} m")
+        print(f"  |  Velocity     : {b.velocity}")
+        print(f"  |  |velocity|   : {speed:.4e} m/s")
+        print(f"  |  KE           : {ke:.4e} J")
+        print(f"  +- Color        : {b.color}")
         print()
 
     def _show_energy(self) -> None:
@@ -366,10 +372,10 @@ Display simulation state.
             print("  [i] No bodies in simulation.")
             return
         e = toolkit.total_system_energy(bodies)
-        print(f"\n  ┌─ System Energy")
-        print(f"  │  Kinetic    : {e['kinetic']:+.6e} J")
-        print(f"  │  Potential  : {e['potential']:+.6e} J")
-        print(f"  └─ Total      : {e['total']:+.6e} J")
+        print(f"\n  +- System Energy")
+        print(f"  |  Kinetic    : {e['kinetic']:+.6e} J")
+        print(f"  |  Potential  : {e['potential']:+.6e} J")
+        print(f"  +- Total      : {e['total']:+.6e} J")
         print()
 
     def _show_integrators(self) -> None:
@@ -389,11 +395,32 @@ Display simulation state.
             print("  [i] No trajectory data recorded.  Use 'simulate ... visualize=on' to record.")
             return
         t0, tf = self._recorder.time_range()
-        print(f"\n  ┌─ Recorded Trajectory")
-        print(f"  │  Bodies     : {len(self._recorder.get_body_names())}")
-        print(f"  │  Snapshots  : {self._recorder.snapshot_count()}")
-        print(f"  └─ Time Range : {t0:.2e} s to {tf:.2e} s ({(tf-t0)/86400:.2f} days)")
+        print(f"\n  +- Recorded Trajectory")
+        print(f"  |  Bodies     : {len(self._recorder.get_body_names())}")
+        print(f"  |  Snapshots  : {self._recorder.snapshot_count()}")
+        print(f"  +- Time Range : {t0:.2e} s to {tf:.2e} s ({(tf-t0)/86400:.2f} days)")
         print()
+
+    def _show_examples(self) -> None:
+        """List the pre-defined simulation examples in the astrolab/example folder."""
+        import os
+        ex_dir = os.path.join(os.path.dirname(__file__), '..', 'example')
+        if not os.path.exists(ex_dir):
+            print(f"  [!] Examples directory not found at {ex_dir}")
+            return
+        
+        files = [f for f in os.listdir(ex_dir) if f.endswith('.json')]
+        if not files:
+            print("  [i] No pre-defined examples found.")
+            return
+
+        print("\n  Pre-defined Simulation Examples")
+        print("  " + "-" * 40)
+        for f in sorted(files):
+            name = f[:-5]  # remove .json
+            print(f"    - {name}")
+        print("  " + "-" * 40)
+        print("  Use 'import example <name>' to load one.\n")
 
     # ── set ──────────────────────────────────────────────────────────────────
 
@@ -423,8 +450,17 @@ Examples
                     print(f"  [+] Integrator set to '{val}'")
                 except ValueError as exc:
                     print(f"  [!] {exc}")
+            elif key == 'ai_provider':
+                self.manager.state.ai_provider = val.lower()
+                print(f"  [+] AI Provider set to '{val}'")
+            elif key == 'ai_model':
+                self.manager.state.ai_model = val
+                print(f"  [+] AI Model set to '{val}'")
+            elif key == 'ai_key':
+                self.manager.state.ai_key = val
+                print(f"  [+] AI API Key updated (hidden).")
             else:
-                print(f"  [!] Unknown parameter: '{key}'.  Try: dt | integrator")
+                print(f"  [!] Unknown parameter: '{key}'.  Try: dt | integrator | ai_provider | ai_model | ai_key")
 
     # ── simulate ─────────────────────────────────────────────────────────────
 
@@ -530,9 +566,10 @@ Examples
             progress_callback=on_progress,
             recorder=self._recorder
         )
+        self._last_result = result
 
         # Final bar fill-in and summary
-        print(f"\r  [{'█' * bar_width}] 100%")
+        print(f"\r  [{'#' * bar_width}] 100%")
         print(f"\n  [+] Complete.  Simulated {result.elapsed_time:.3e} s total.")
 
         if result.collisions:
@@ -607,6 +644,7 @@ Examples
                       f"create body ... radius=<r>")
                 return
             ve = toolkit.escape_velocity(b)
+            self._last_compute = ('escape_velocity', ve, {'body': b.name})
             print(f"\n  Escape velocity of '{b.name}': {ve:.4f} m/s  "
                   f"({ve / 1e3:.4f} km/s)\n")
 
@@ -615,6 +653,7 @@ Examples
             pri = self._get_body(kw.get('primary'))
             if not orb or not pri: return
             T    = toolkit.orbital_period(orb, pri)
+            self._last_compute = ('orbital_period', T, {'body': orb.name, 'primary': pri.name})
             days = T / 86_400
             yrs  = T / (365.25 * 86_400)
             print(f"\n  Orbital period of '{orb.name}' around '{pri.name}':")
@@ -625,6 +664,7 @@ Examples
             b2 = self._get_body(kw.get('body2'))
             if not b1 or not b2: return
             F, uv = toolkit.gravitational_force(b1, b2)
+            self._last_compute = ('gravitational_force', F, {'body1': b1.name, 'body2': b2.name})
             dist  = (b1.position - b2.position).magnitude()
             print(f"\n  Gravitational force: '{b1.name}' ↔ '{b2.name}'")
             print(f"    Separation : {dist:.4e} m")
@@ -636,6 +676,7 @@ Examples
             if not bodies:
                 print("  [i] No bodies."); return
             e = toolkit.total_system_energy(bodies)
+            self._last_compute = ('system_energy', e['total'], {})
             print(f"\n  System Energy")
             print(f"    Kinetic   : {e['kinetic']:+.6e} J")
             print(f"    Potential : {e['potential']:+.6e} J")
@@ -645,6 +686,7 @@ Examples
             b  = self._get_body(kw.get('body'))
             if not b: return
             rs = toolkit.schwarzschild_radius(b)
+            self._last_compute = ('schwarzschild_radius', rs, {'body': b.name})
             note = ''
             if b.radius > 0:
                 ratio = b.radius / rs
@@ -661,6 +703,7 @@ Examples
             sec = self._get_body(kw.get('secondary'))
             if not pri or not sec: return
             pts  = toolkit.lagrange_points(pri, sec)
+            self._last_compute = ('lagrange_points', pts, {'primary': pri.name, 'secondary': sec.name})
             sep  = (sec.position - pri.position).magnitude()
             print(f"\n  Lagrange Points: '{pri.name}' – '{sec.name}'  "
                   f"(separation: {sep:.4e} m)")
@@ -675,6 +718,7 @@ Examples
             b = self._get_body(kw.get('body'))
             if not b: return
             rph = toolkit.photon_sphere_radius(b)
+            self._last_compute = ('photon_sphere_radius', rph, {'body': b.name})
             rs  = toolkit.schwarzschild_radius(b)
             print(f"\n  Photon sphere of '{b.name}': {rph:.4e} m  ({rph / 1e3:.4f} km)")
             print(f"    = 1.5 × Schwarzschild radius ({rs:.4e} m)")
@@ -685,6 +729,7 @@ Examples
             if not b: return
             spin = float(kw.get('spin', '0'))
             r_isco = toolkit.isco_radius(b, spin=spin)
+            self._last_compute = ('isco_radius', r_isco, {'body': b.name, 'spin': spin})
             print(f"\n  ISCO of '{b.name}' (spin={spin}): {r_isco:.4e} m  ({r_isco / 1e3:.4f} km)")
             if spin == 0:
                 print(f"    = 3 × Schwarzschild radius")
@@ -699,6 +744,7 @@ Examples
                 print("  [!] Both r_emit and r_obs are required and must be > 0.")
                 return
             rs_data = toolkit.gravitational_redshift_at(r_emit, r_obs, b)
+            self._last_compute = ('gravitational_redshift', rs_data['z'], {'body': b.name, 'r_emit': r_emit, 'r_obs': r_obs})
             print(f"\n  Gravitational Redshift")
             print(f"    Emitter at  : {r_emit:.4e} m")
             print(f"    Observer at : {r_obs:.4e} m")
@@ -714,6 +760,7 @@ Examples
             if r <= 0:
                 print("  [!] 'r' is required and must be > 0."); return
             factor = toolkit.time_dilation_factor(r, b)
+            self._last_compute = ('time_dilation_factor', factor, {'body': b.name, 'r': r})
             print(f"\n  Time Dilation at r={r:.4e} m from '{b.name}'")
             print(f"    dτ/dt = {factor:.8f}")
             print(f"    Clock runs at {factor * 100:.4f}% of distant clock rate")
@@ -726,6 +773,63 @@ Examples
                    "energy | schwarzschild | lagrange | photon_sphere | isco | "
                    "redshift | timedilation")
  
+    # ── ask ──────────────────────────────────────────────────────────────────
+
+    def do_ask(self, arg: str) -> None:
+        """
+Ask Generative AI about your simulation, results, or general physics.
+
+Usage:
+  ask <your question>
+
+The AI is context-aware. If your query includes keywords like 'state', 
+'result', or 'compute', or if you mention a body name (e.g. 'Earth'), 
+relevant simulation data will be bundled with the query to save tokens.
+
+Examples:
+  ask Why is the Sun hot?
+  ask Explain the current state of the Earth.
+  ask What happened in the last simulation result?
+  ask Why should I use Verlet instead of Euler?
+        """
+        if not arg.strip():
+            print("  Usage: ask <your question>")
+            return
+
+        query = arg.strip()
+        
+        # Pull AI config from state
+        provider = self.manager.state.ai_provider
+        model    = self.manager.state.ai_model
+        key      = self.manager.state.ai_key
+
+        interpreter = AstroInterpreter(provider=provider, model=model, api_key=key)
+
+        print(f"\n  [*] Consulting Professor Claude ({model})...")
+        try:
+            explanation = interpreter.ask(
+                query=query,
+                state=self.manager.state,
+                last_result=self._last_result,
+                last_compute=self._last_compute
+            )
+            self._print_wrapped(explanation)
+        except Exception as exc:
+            print(f"  [!] Error during AI interaction: {exc}")
+
+    def _print_wrapped(self, text: str, width: int = 80) -> None:
+        """Utility to print AI output with cleaner formatting."""
+        import textwrap
+        print("\n  " + "-" * width)
+        for line in text.split('\n'):
+            line = line.strip()
+            if not line:
+                print()
+                continue
+            wrapped = textwrap.fill(line, width=width, initial_indent="  ", subsequent_indent="  ")
+            print(wrapped)
+        print("  " + "-" * width + "\n")
+
     # ── visualize ────────────────────────────────────────────────────────────
  
     def do_visualize(self, arg: str) -> None:
@@ -821,19 +925,37 @@ Save simulation state to a JSON file.
 Load simulation state from a JSON file.
 
   import state file=<path>
+  import example <name>     — Load a pre-defined example from the library
         """
         tokens = shlex.split(arg)
-        if len(tokens) < 2 or tokens[0] != 'state':
-            print("  Usage: import state file=<path>")
+        if not tokens:
+            print("  Usage: import state file=<path> | import example <name>")
             return
-        try:
-            kw = parse_kwargs(tokens[1:])
-        except ValueError as exc:
-            print(f"  [!] {exc}"); return
-        if 'file' not in kw:
-            print("  [!] 'file' is required."); return
-        if self.manager.import_state(kw['file']):
-            print(f"  [+] State loaded ← '{kw['file']}'")
+
+        sub = tokens[0].lower()
+
+        if sub == 'example' and len(tokens) == 2:
+            name = tokens[1]
+            ex_dir = os.path.join(os.path.dirname(__file__), '..', 'example')
+            path = os.path.join(ex_dir, f"{name}.json")
+            if not os.path.exists(path):
+                print(f"  [!] Example '{name}' not found. Use 'show examples' to list them.")
+                return
+            target_file = path
+        elif sub == 'state':
+            try:
+                kw = parse_kwargs(tokens[1:])
+            except ValueError as exc:
+                print(f"  [!] {exc}"); return
+            if 'file' not in kw:
+                print("  [!] 'file' is required."); return
+            target_file = kw['file']
+        else:
+            print("  Usage: import state file=<path> | import example <name>")
+            return
+
+        if self.manager.import_state(target_file):
+            print(f"  [+] State loaded ← '{os.path.basename(target_file)}'")
             # Re-sync engine to new state
             self._engine = SimulationEngine(self.manager.state)
 

@@ -218,6 +218,9 @@ class SimulationState:
     dt:         float = 60.0
     step:       int   = 0
     integrator: str   = "rk4"
+    ai_provider: str  = "anthropic"
+    ai_key:      str  = ""
+    ai_model:    str  = "claude-haiku-4-5"
 
     # ── Convenience accessors ────────────────────────────────────────────────
 
@@ -244,6 +247,9 @@ class SimulationState:
             "step":       self.step,
             "integrator": self.integrator,
             "bodies":     [b.to_dict() for b in self.bodies],
+            "ai_provider": self.ai_provider,
+            "ai_key":      self.ai_key,
+            "ai_model":    self.ai_model,
         }
 
     @classmethod
@@ -254,6 +260,9 @@ class SimulationState:
             dt=data.get('dt', 60.0),
             step=data.get('step', 0),
             integrator=data.get('integrator', 'rk4'),
+            ai_provider=data.get('ai_provider', 'anthropic'),
+            ai_key=data.get('ai_key', ''),
+            ai_model=data.get('ai_model', 'claude-haiku-4-5'),
         )
 
     def save(self, filepath: str) -> None:
