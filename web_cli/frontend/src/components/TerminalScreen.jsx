@@ -16,9 +16,9 @@ const BANNER = `\x1b[1;36m
 \x1b[0m
    \x1b[1;33mAstroLab CLI v3.0\x1b[0m | N-Body & General Relativity Simulation
   \x1b[1;30m---------------------------------------------------------\x1b[0m
-   Type \x1b[1;32mhelp\x1b[0m to list commands
-   Type \x1b[1;34mask <question>\x1b[0m to talk to AI
+   Type \x1b[1;32mhelp\x1b[0m for commands | Type \x1b[1;35mask\x1b[0m for AI Chat
 `;
+
 
 export default function TerminalScreen({ onLogout }) {
   const terminalRef = useRef(null);
@@ -140,8 +140,10 @@ export default function TerminalScreen({ onLogout }) {
     }
   };
 
-  const handleCommand = async (cmd) => {
+  const handleCommand = async (rawCmd) => {
     const term = termInstance.current;
+    const cmd = rawCmd.trim();
+    const cmdLower = cmd.toLowerCase();
     
     if (!cmd) {
       promptUser();
@@ -151,13 +153,13 @@ export default function TerminalScreen({ onLogout }) {
     history.current.push(cmd);
     
     if (isQueryMode.current) {
-      if (cmd.toLowerCase() === 'exit') {
+      if (cmdLower === 'exit' || cmdLower === 'quit') {
         term.writeln('\x1b[1;33mexiting LLM query mode...\x1b[0m');
         isQueryMode.current = false;
         promptUser();
         return;
       }
-      if (cmd === 'clear') {
+      if (cmdLower === 'clear') {
         term.clear();
         promptUser();
         return;
@@ -166,52 +168,51 @@ export default function TerminalScreen({ onLogout }) {
       return;
     }
 
-    if (cmd === 'ask') {
-      term.writeln('\x1b[1;35m>>>entering LLM query mode (type "exit" to leave)\x1b[0m');
-      isQueryMode.current = true;
-      promptUser();
-      return;
-    }
-
-    if (cmd === 'clear') {
+    // INTERCEPTORS (Catch before sending to Python engine)
+    
+    if (cmdLower === 'clear') {
       term.clear();
       promptUser();
       return;
     }
 
-    if (cmd === 'help') {
+    if (cmdLower === 'ask') {
+      term.writeln('\x1b[1;35m>>> entering AI Chat mode (type "exit" to leave)\x1b[0m');
+      isQueryMode.current = true;
+      promptUser();
+      return;
+    }
+
+    if (cmdLower.startsWith('ask ')) {
+      const promptText = cmd.slice(4).trim();
+      if (!promptText) {
+        term.writeln('\x1b[1;31mError:\x1b[0m Please provide a prompt or type "ask" alone.');
+        promptUser();
+        return;
+      }
+      await handleAskStream(promptText);
+      return;
+    }
+
+    if (cmdLower === 'help') {
       term.writeln('\x1b[1;36mWEB CLI SPECIFIC COMMANDS:\x1b[0m');
       term.writeln('  \x1b[1;33mclear\x1b[0m     - Clear terminal output');
       term.writeln('  \x1b[1;33mhistory\x1b[0m   - Show command history');
-      term.writeln('  \x1b[1;33mask\x1b[0m       - Enter continuous AI conversation mode');
+      term.writeln('  \x1b[1;33mask\x1b[0m       - Enter persistent AI Chat mode');
       term.writeln('  \x1b[1;33mask <q>\x1b[0m   - Ask a single AI question');
       term.writeln('');
       term.writeln('\x1b[1;36mASTROLAB PHYSICS COMMANDS (Powered by Python Engine):\x1b[0m');
-      
-      // Pass the 'help' command to the actual Python engine backend
       await handleExecutionStream('help');
       return;
     }
 
-    if (cmd === 'history') {
+    if (cmdLower === 'history') {
       history.current.forEach((h, i) => term.writeln(`  ${i+1}  ${h}`));
       promptUser();
       return;
     }
 
-    if (cmd.startsWith('ask ')) {
-      const promptText = cmd.slice(4).trim();
-      if (!promptText) {
-        term.writeln('\x1b[1;31mError:\x1b[0m Please provide a prompt. Usage: ask <prompt>');
-        promptUser();
-        return;
-      }
-      
-      await handleAskStream(promptText);
-      return;
-    }
-
-    // Instead of Command Not Found, assume it's an AstroLab command
+    // Fallback: Send to AstroLab Python Engine
     await handleExecutionStream(cmd);
   };
 
