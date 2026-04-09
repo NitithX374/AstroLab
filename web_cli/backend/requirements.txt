@@ -6,4 +6,4 @@ passlib[bcrypt]>=1.7.4
 PyJWT>=2.8.0
 python-dotenv>=1.0.0
 pydantic>=2.4.0
-slowapi>=0.2.8
+slowapi>=0.1.9

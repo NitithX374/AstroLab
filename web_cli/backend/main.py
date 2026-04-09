@@ -26,11 +26,9 @@ app = FastAPI(lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Allowed Origins (for local React development using Vite)
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+# Allowed Origins (handles both local dev and production from env)
+env_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
+origins = [o.strip() for o in env_origins.split(",")]
 
 app.add_middleware(
     CORSMiddleware,
