@@ -201,8 +201,10 @@ export default function TerminalScreen({ onLogout }) {
             try {
                 const payload = JSON.parse(dataStr);
                 if (payload.text) {
-                    // Standard xterm chunk write, \r natively handled
-                    term.write(payload.text);
+                    // xterm.js requires \r\n to return to the beginning of the next line.
+                    // Python print() usually just outputs \n.
+                    const formattedText = payload.text.replace(/(?<!\r)\n/g, '\r\n');
+                    term.write(formattedText);
                 }
             } catch (e) {
                 // Ignore incomplete JSON chunks from splitting

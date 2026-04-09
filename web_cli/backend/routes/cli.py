@@ -90,6 +90,13 @@ async def ask_stream(request: Request, ask_req: AskRequest, current_user: dict =
     messages = await cursor.to_list(length=20)
     messages.reverse()
     
+    # Format messages for Anthropic (remove ObjectIds)
+    anthropic_messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in messages
+        if m["role"] in ("user", "assistant")
+    ]
+    
     async def event_generator():
         start_time = time.time()
         full_response = ""
@@ -98,7 +105,7 @@ async def ask_stream(request: Request, ask_req: AskRequest, current_user: dict =
             # Wrap the real generator in an asyncio timeout
             async with asyncio.timeout(30.0):
                 # We need to pass user_id (string) to get simulation context
-                async for token in get_real_llm_stream(messages, str(user_id)):
+                async for token in get_real_llm_stream(anthropic_messages, str(user_id)):
                     full_response += token
                     token_count += 1
                     yield f"data: {token}\n\n"
@@ -162,12 +169,18 @@ async def ask_sync(request: Request, ask_req: AskRequest, current_user: dict = D
     messages = await cursor.to_list(length=20)
     messages.reverse()
 
+    anthropic_messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in messages
+        if m["role"] in ("user", "assistant")
+    ]
+
     start_time = time.time()
     full_response = ""
     token_count = 0
     try:
         async with asyncio.timeout(30.0):
-            async for token in get_real_llm_stream(messages, str(user_id)):
+            async for token in get_real_llm_stream(anthropic_messages, str(user_id)):
                 full_response += token
                 token_count += 1
                 
