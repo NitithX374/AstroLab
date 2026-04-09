@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
-from passlib.context import CryptContext
+import bcrypt
 import os
 from pydantic import BaseModel
 from datetime import datetime, timedelta
@@ -12,7 +12,6 @@ SECRET_KEY = os.getenv("SECRET_KEY", "your-very-secret-key-change-in-production"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24 * 60 # 30 days
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 router = APIRouter()
 
 class UserCreate(BaseModel):
@@ -24,11 +23,13 @@ class UserLogin(BaseModel):
     password: str
 
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
 def get_password_hash(password):
-    # Bcrypt has a 72-byte limit. We truncate here to avoid ValueError in some environments.
-    return pwd_context.hash(password[:72])
+    # Truncate to 72 bytes max for bcrypt compatibility
+    pwd_bytes = password.encode('utf-8')[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(pwd_bytes, salt).decode('utf-8')
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
