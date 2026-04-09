@@ -99,9 +99,10 @@ async def login(response: Response, user: UserLogin):
         httponly=True,
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         expires=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        samesite="lax",
-        secure=True # Always True in production for HTTPS
+        samesite="none", # CRITICAL for Vercel -> Render communication
+        secure=True      # REQUIRED when samesite="none"
     )
+
     return {"message": "Login successful"}
 
 @router.post("/logout")
