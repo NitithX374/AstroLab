@@ -1,20 +1,23 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
 DATABASE_NAME = "ai_cli_db"
 
-client = None
-db = None
+# We initialize these globally so they are available immediately
+client = AsyncIOMotorClient(MONGO_URL)
+db = client[DATABASE_NAME]
 
 async def connect_to_mongo():
-    global client, db
-    client = AsyncIOMotorClient(MONGO_URL)
-    db = client[DATABASE_NAME]
-    print(f"Connected to MongoDB at {MONGO_URL}")
+    # Verify the connection
+    try:
+        await client.admin.command('ping')
+        print(f"Connected to MongoDB Atlas successfully")
+    except Exception as e:
+        print(f"Could not connect to MongoDB: {e}")
 
 async def close_mongo_connection():
-    global client
-    if client:
-        client.close()
-        print("Closed MongoDB connection")
+    client.close()
