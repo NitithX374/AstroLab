@@ -41,20 +41,11 @@ async def get_real_llm_stream(context_messages: list, user_id: str):
 
     # Optimize tokens: only inject simulation state if relevant keywords or body names are mentioned
     # Scan the entire current context window (usually 1-5 messages in web flow)
-    full_prompt_text = " ".join([m['content'].lower() for m in context_messages])
-    keywords = ["body", "state", "blackhole", "result", "compute", "simulate", "simulation", "orbit", "system", "earth", "sun", "moon", "solar"]
-    needs_context = any(kw in full_prompt_text for kw in keywords)
-    
-    if hasattr(cli, 'manager') and cli.manager.state:
-        body_names = [b.name.lower() for b in cli.manager.state.bodies]
-        if any(b_name in full_prompt_text for b_name in body_names):
-            needs_context = True
-            
-        if needs_context:
-            sim_state_summary = f"CURRENT SIMULATION CONTEXT:\n{get_session_state_summary(user_id)}\n"
+    if (hasattr(cli, 'manager') and cli.manager.state) or \
+   (hasattr(cli, '_bh_config') and cli._bh_config):
+        sim_state_summary = f"CURRENT SIMULATION CONTEXT:\n{get_session_state_summary(user_id)}\n"
     else:
-        if needs_context:
-            sim_state_summary = "CURRENT SIMULATION CONTEXT: No simulation state available.\n"
+        sim_state_summary = ""
 
     system_prompt = (
         "You are the AstroLab AI assistant. You provide expert guidance on astrophysics, "
@@ -153,7 +144,7 @@ async def ask_stream(request: Request, ask_req: AskRequest, current_user: dict =
                 "response": full_response,
                 "tokens_used": token_count,
                 "latency_ms": latency_ms,
-                "model": "mock-llm-v1",
+                "model": "claude-haiku-4-5-20251001",
                 "status": "success",
                 "created_at": datetime.utcnow()
             })
@@ -241,7 +232,7 @@ async def ask_sync(request: Request, ask_req: AskRequest, current_user: dict = D
             "response": full_response,
             "tokens_used": token_count,
             "latency_ms": latency_ms,
-            "model": "mock-llm-v1",
+            "model": "claude-haiku-4-5-20251001",
             "status": "error",
             "created_at": datetime.utcnow()
         })

@@ -47,7 +47,6 @@ def clear_astrolab_session(user_id: str) -> None:
         del active_sessions[user_id]
 
 def get_session_state_summary(user_id: str) -> str:
-    """Returns a formatted summary of the current session state for AI context."""
     if user_id not in active_sessions:
         return "No active session."
     
@@ -56,21 +55,29 @@ def get_session_state_summary(user_id: str) -> str:
     
     # N-Body State
     if hasattr(cli, 'manager') and cli.manager.state:
-        bodies = cli.manager.get_all_bodies()
-        body_list = [f"{b.name} ({b.body_type})" for b in bodies]
-        nbody_sum = f"N-Body Engine: {', '.join(body_list) if body_list else 'No bodies loaded'}. Timestep: {cli.manager.state.dt}s."
-        summary_parts.append(f"- {nbody_sum}")
+        state = cli.manager.state
+        summary_parts.append(f"N-Body Engine — Timestep: {state.dt}s | Bodies: {len(state.bodies)}")
+        
+        for b in state.bodies:
+            body_info = (
+                f"  [{b.name}] type={b.body_type}, mass={b.mass:.4e} kg, radius={b.radius:.4e} m"
+                f" | pos=({b.position.x:.4e}, {b.position.y:.4e}, {b.position.z:.4e}) m"
+                f" | vel=({b.velocity.x:.4e}, {b.velocity.y:.4e}, {b.velocity.z:.4e}) m/s"
+            )
+            summary_parts.append(body_info)
     
     # GR / Black Hole State
     if hasattr(cli, '_bh_config') and cli._bh_config is not None:
         bh = cli._bh_config
-        gr_sum = f"Active Black Hole: Mass {bh.mass_kg:.4e} kg (~{bh.mass_kg / 1.989e30:.4e} M_solar), metric={bh.metric_type}, spin={bh.spin}."
-        summary_parts.append(f"- GR Engine: {gr_sum}")
+        summary_parts.append(
+            f"GR Engine — mass={bh.mass_kg:.4e} kg (~{bh.mass_kg / 1.989e30:.4e} M_sun)"
+            f", metric={bh.metric_type}, spin={bh.spin}"
+            f", schwarzschild_radius={bh.schwarzschild_radius_km:.4e} km"
+        )
     else:
-        summary_parts.append("- GR Engine: No active standalone black hole.")
+        summary_parts.append("GR Engine: No active black hole.")
 
     return "\n".join(summary_parts)
-
 async def cleanup_idle_sessions():
     """Background task to remove idle sessions and prevent memory leaks."""
     while True:
