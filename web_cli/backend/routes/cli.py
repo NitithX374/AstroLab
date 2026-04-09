@@ -33,12 +33,24 @@ async def get_real_llm_stream(context_messages: list, user_id: str):
     
     # 1. Get the actual simulation state from this user's Python engine
     cli = get_astrolab_session(user_id)
-    sim_state_summary = "No simulation state available."
+    sim_state_summary = ""
+    
+    # Optimize tokens: only inject simulation state if relevant keywords or body names are mentioned
+    user_prompt = context_messages[-1]['content'].lower() if context_messages else ""
+    keywords = ["body", "state", "blackhole", "result", "compute", "simulate", "simulation", "orbit", "system"]
+    needs_context = any(kw in user_prompt for kw in keywords)
     
     if hasattr(cli, 'manager') and cli.manager.state:
-        # Create a brief summary of the physics engine for the AI
-        bodies = [f"{b.name} ({b.body_type})" for b in cli.manager.state.bodies]
-        sim_state_summary = f"Current bodies in simulation: {', '.join(bodies)}. Timestep (dt): {cli.manager.state.dt}s."
+        body_names = [b.name.lower() for b in cli.manager.state.bodies]
+        if any(b_name in user_prompt for b_name in body_names):
+            needs_context = True
+            
+        if needs_context:
+            bodies = [f"{b.name} ({b.body_type})" for b in cli.manager.state.bodies]
+            sim_state_summary = f"CURRENT SIMULATION CONTEXT: Current bodies in simulation: {', '.join(bodies)}. Timestep (dt): {cli.manager.state.dt}s.\n"
+    else:
+        if needs_context:
+            sim_state_summary = "CURRENT SIMULATION CONTEXT: No simulation state available.\n"
 
     # 2. Inject this as a System Prompt
     system_prompt = (
@@ -47,7 +59,7 @@ async def get_real_llm_stream(context_messages: list, user_id: str):
         "AstroLab is an advanced simulation engine that fully supports N-body gravity, "
         "Schwarzschild/Kerr black hole metrics, relativistic effects, and geodesic integrators.\n"
         "NEVER claim that black holes or GR are 'outside AstroLab's scope', as they are core to the platform.\n"
-        f"CURRENT SIMULATION CONTEXT: {sim_state_summary}\n"
+        f"{sim_state_summary}"
         "The user is interacting via the AstroLab Web CLI terminal. Keep responses professional, "
         "formatted cleanly, and strictly focused on physics and simulations."
     )
