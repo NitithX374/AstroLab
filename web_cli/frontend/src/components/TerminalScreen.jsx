@@ -4,7 +4,21 @@ import { FitAddon } from 'xterm-addon-fit';
 import { API_BASE_URL } from '../config';
 import 'xterm/css/xterm.css';
 
-const COMMANDS = ['help', 'clear', 'history', 'ask '];
+const COMMANDS = ['help', 'clear', 'history', 'ask', 'simulate', 'show', 'create', 'demo'];
+
+const BANNER = `\x1b[1;36m
+   █████╗ ███████╗████████╗██████╗  ██████╗ ██╗      █████╗ ██████╗ 
+  ██╔══██╗██╔════╝╚══██╔══╝██╔══██╗██╔═══██╗██║     ██╔══██╗██╔══██╗
+  ███████║███████╗   ██║   ██████╔╝██║   ██║██║     ███████║██████╔╝
+  ██╔══██║╚════██║   ██║   ██╔══██╗██║   ██║██║     ██╔══██║██╔══██╗
+  ██║  ██║███████║   ██║   ██║  ██║╚██████╔╝███████╗██║  ██║██████╔╝
+  ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ 
+\x1b[0m
+   \x1b[1;33mAstroLab CLI v3.0\x1b[0m | N-Body & General Relativity Simulation
+  \x1b[1;30m---------------------------------------------------------\x1b[0m
+   Type \x1b[1;32mhelp\x1b[0m to list commands
+   Type \x1b[1;34mask <question>\x1b[0m to talk to AI
+`;
 
 export default function TerminalScreen({ onLogout }) {
   const terminalRef = useRef(null);
@@ -45,8 +59,8 @@ export default function TerminalScreen({ onLogout }) {
     termInstance.current = term;
     fitAddonInstance.current = fitAddon;
 
-    term.writeln('\x1b[1;36mWelcome to AstroLab AI Web CLI\x1b[0m');
-    term.writeln('Type \x1b[1;32mhelp\x1b[0m to see available commands.\n');
+    term.write(BANNER);
+    term.writeln('');
     promptUser();
 
     // Handle Resize
