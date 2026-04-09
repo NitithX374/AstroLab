@@ -4,6 +4,8 @@
  
 # ── Required: General Relativity Module ─────────────────────────────
 numpy               # Matrix operations for metric tensors, Christoffel symbols
+slowapi>=0.1.9
+anthropic>=0.18.0
  
 # ── Optional: Visualization ─────────────────────────────────────────
 # Install these for the 'visualize' command and 'simulate visualize=...'

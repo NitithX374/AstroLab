@@ -8,6 +8,8 @@ from bson import ObjectId
 import json
 import asyncio
 import time
+import os
+from anthropic import AsyncAnthropic
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -17,19 +19,40 @@ router = APIRouter()
 class AskRequest(BaseModel):
     prompt: str
 
-# Mock LLM generation simulating a real LLM stream
-async def mock_llm_stream(context_messages: list):
-    prompt_text = context_messages[-1]['content']
+# Initialize Anthropic Client
+anthropic_client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY", "missing-key"))
+
+async def get_real_llm_stream(context_messages: list, user_id: str):
+    from astrolab_session import get_astrolab_session
     
-    response_tokens = [
-        "Thinking", " about", f" '{prompt_text}'", "... ",
-        "Based", " on", " the", " context", " provided", ",", " I", " am", " an",
-        " AI", " CLI", " assistant", " that", " streams", " tokens", " directly", " to", " your", " browser", " terminal."
-    ]
+    # 1. Get the actual simulation state from this user's Python engine
+    cli = get_astrolab_session(user_id)
+    sim_state_summary = "No simulation state available."
     
-    for token in response_tokens:
-        await asyncio.sleep(0.05) # Simulate latency
-        yield token
+    if hasattr(cli, 'manager') and cli.manager.state:
+        # Create a brief summary of the physics engine for the AI
+        bodies = [f"{b.name} ({b.body_type})" for b in cli.manager.state.bodies]
+        sim_state_summary = f"Current bodies in simulation: {', '.join(bodies)}. Timestep (dt): {cli.manager.state.dt}s."
+
+    # 2. Inject this as a System Prompt
+    system_prompt = (
+        "You are the AstroLab AI assistant. You help users with astrophysical simulations. "
+        f"CONTEXT: {sim_state_summary} "
+        "User is interacting via a Web CLI terminal. Keep responses concise and professional."
+    )
+
+    # 3. Stream from Anthropic
+    try:
+        async with anthropic_client.messages.stream(
+            model="claude-3-haiku-20240307",
+            max_tokens=1024,
+            system=system_prompt,
+            messages=context_messages
+        ) as stream:
+            async for text in stream.text_stream:
+                yield text
+    except Exception as e:
+        yield f"[ERROR] Anthropic API failed: {str(e)}"
 
 async def get_or_create_conversation(user_id: ObjectId):
     conv = await db.conversations.find_one({"user_id": user_id}, sort=[("updated_at", -1)])
@@ -72,9 +95,10 @@ async def ask_stream(request: Request, ask_req: AskRequest, current_user: dict =
         full_response = ""
         token_count = 0
         try:
-            # Wrap the mock generator in an asyncio timeout (e.g. 30 seconds max)
+            # Wrap the real generator in an asyncio timeout
             async with asyncio.timeout(30.0):
-                async for token in mock_llm_stream(messages):
+                # We need to pass user_id (string) to get simulation context
+                async for token in get_real_llm_stream(messages, str(user_id)):
                     full_response += token
                     token_count += 1
                     yield f"data: {token}\n\n"
@@ -143,7 +167,7 @@ async def ask_sync(request: Request, ask_req: AskRequest, current_user: dict = D
     token_count = 0
     try:
         async with asyncio.timeout(30.0):
-            async for token in mock_llm_stream(messages):
+            async for token in get_real_llm_stream(messages, str(user_id)):
                 full_response += token
                 token_count += 1
                 
