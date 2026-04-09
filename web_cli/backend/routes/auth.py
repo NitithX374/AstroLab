@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import jwt
 from typing import Optional
 from database import db
-
+from astrolab_session import clear_astrolab_session
 # JWT Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-very-secret-key-change-in-production")
 ALGORITHM = "HS256"
@@ -106,7 +106,11 @@ async def login(response: Response, user: UserLogin):
     return {"message": "Login successful"}
 
 @router.post("/logout")
-async def logout(response: Response):
+async def logout(response: Response, current_user: dict = Depends(get_current_user)):
+    from astrolab_session import clear_astrolab_session
+    
+    user_id = str(current_user["_id"])
+    clear_astrolab_session(user_id)  # ← ล้าง simulation state
     response.delete_cookie("access_token")
     return {"message": "Logged out successfully"}
 

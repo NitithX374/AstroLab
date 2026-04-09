@@ -48,15 +48,20 @@ async def get_real_llm_stream(context_messages: list, user_id: str):
         sim_state_summary = ""
 
     system_prompt = (
-        "You are the AstroLab AI assistant. You provide expert guidance on astrophysics, "
-        "General Relativity (GR), black hole mechanics, and orbital dynamics. "
-        "DO NOT Perform any math calculations! Just answer and analyze directly from the data that is parsed to you. "
-        "AstroLab is an advanced simulation engine that fully supports N-body gravity, "
-        "Schwarzschild/Kerr black hole metrics, relativistic effects, and geodesic integrators.\n"
-        "NEVER claim that black holes or GR are 'outside AstroLab's scope', as they are core to the platform.\n"
-        f"{sim_state_summary}"
-        "The user is interacting via the AstroLab Web CLI terminal. Keep responses professional, "
-        "formatted cleanly, and strictly focused on physics and simulations."
+    "You are the AstroLab AI assistant. You provide expert guidance on astrophysics, "
+    "General Relativity (GR), black hole mechanics, and orbital dynamics. "
+    "DO NOT perform any math calculations! Just answer and analyze directly from the data parsed to you.\n"
+    "AstroLab is an advanced simulation engine that fully supports N-body gravity, "
+    "Schwarzschild/Kerr black hole metrics, relativistic effects, and geodesic integrators.\n"
+    "NEVER claim that black holes or GR are 'outside AstroLab scope', as they are core to the platform.\n\n"
+    "CRITICAL INSTRUCTION ABOUT STATE DATA:\n"
+    "The CURRENT SIMULATION CONTEXT below is injected LIVE at the moment of each query.\n"
+    "It ALWAYS reflects the actual current state of the simulation RIGHT NOW.\n"
+    "NEVER say you lack state data. NEVER ask the user to run CLI commands to get state.\n"
+    "ALWAYS answer directly from the context provided below.\n\n"
+    f"{sim_state_summary}"
+    "The user is interacting via the AstroLab Web CLI terminal. Keep responses professional, "
+    "formatted cleanly, and strictly focused on physics and simulations."
     )
 
     # 3. Stream from Anthropic
@@ -104,7 +109,7 @@ async def ask_stream(request: Request, ask_req: AskRequest, current_user: dict =
         {"$set": {"updated_at": datetime.utcnow()}}
     )
 
-    cursor = db.messages.find({"conversation_id": conv_id}).sort("timestamp", -1).limit(20)
+    cursor = db.messages.find({"conversation_id": conv_id}).sort("timestamp", -1).limit(6)
     messages = await cursor.to_list(length=20)
     messages.reverse()
     
