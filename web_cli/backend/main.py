@@ -30,34 +30,22 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 env_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
 origins = [o.strip() for o in env_origins.split(",")]
 
+app.include_router(auth.router, prefix="/auth", tags=["auth"])
+app.include_router(cli.router, tags=["cli"])
+
+@app.middleware("http")
+async def apply_rate_limit(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return await call_next(request)
+    return await call_next(request)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True, # Important for HttpOnly cookies
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
-# Apply rate limiting to CLI router (5 requests per second)
-# Since router depends on Request for rate limiting, we could add it at router level,
-# but it's easier to add it on the app with a dependency or directly decorating routes.
-# Actually slowapi requires decorating the endpoints. I'll modify the cli endpoints below directly.
-
-# Applying rate limit directly to the app routes imported from cli
-@app.middleware("http")
-async def apply_rate_limit(request: Request, call_next):
-    # CRITICAL: Allow CORS preflight requests (OPTIONS) to pass through without checks or rate limiting
-    if request.method == "OPTIONS":
-        return await call_next(request)
-        
-    if request.url.path.startswith("/ask"):
-        # slowapi is already handling decorating specific routes, 
-        # but we keep this middleware block for general request tracking if needed.
-        pass
-    return await call_next(request)
-
-app.include_router(cli.router, tags=["cli"])
 
 @app.get("/")
 async def root():
