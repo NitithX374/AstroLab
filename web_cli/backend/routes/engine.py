@@ -29,13 +29,22 @@ class QueueWriter(io.TextIOBase):
 
 def execute_command_in_thread(cli, command: str, out_queue: Queue):
     writer = QueueWriter(out_queue)
+    # Save the original stdout reference so we don't break the CLI if used elsewhere
+    original_stdout = getattr(cli, 'stdout', sys.stdout)
+    
     try:
+        # Override the bound stdout on the cmd.Cmd instance so internal methods
+        # like do_help() log to our custom writer instead of the old sys.stdout
+        cli.stdout = writer
+        
         with redirect_stdout(writer), redirect_stderr(writer):
             cli.onecmd(command)
     except Exception as e:
         # Catch unexpected crashes
         writer.write(f"\n[Error]: {str(e)}\n")
     finally:
+        # Restore the original reference
+        cli.stdout = original_stdout
         out_queue.put("[DONE]")
 
 @router.post("/execute/stream")
