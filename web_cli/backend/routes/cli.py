@@ -23,6 +23,12 @@ class AskRequest(BaseModel):
 anthropic_client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY", "missing-key"))
 
 async def get_real_llm_stream(context_messages: list, user_id: str):
+    # Check if API key was provided
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key or api_key == "missing-key":
+        yield "[ERROR] Anthropic API Key is missing in Render environment variables."
+        return
+
     from astrolab_session import get_astrolab_session
     
     # 1. Get the actual simulation state from this user's Python engine
@@ -44,7 +50,7 @@ async def get_real_llm_stream(context_messages: list, user_id: str):
     # 3. Stream from Anthropic
     try:
         async with anthropic_client.messages.stream(
-            model="claude-3-haiku-20240307",
+            model="claude-3-5-sonnet-20241022",
             max_tokens=1024,
             system=system_prompt,
             messages=context_messages
