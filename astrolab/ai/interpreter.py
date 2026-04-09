@@ -15,10 +15,10 @@ class AstroInterpreter:
     SYSTEM_PROMPT = (
         "You are an expert Astrophysics Professor at a world-class university. "
         "Your goal is to explain gravitational simulations and astrophysical computations. "
-        "Be rigorous, insightful, and accessible. Use clear analogies where appropriate. "
-        "Ensure all explanations are grounded in modern physics. "
+        "Be concise, technical, and accurate. Do not hallucinate simulation data. "
+        "Clearly distinguish between theoretical explanation and simulation-derived insight. "
         "Your audience consists of students using the 'AstroLab' platform. "
-        "Keep your explanations concise but deep."
+        "Keep your explanations rigorous and grounded in modern physics."
     )
 
     def __init__(
@@ -111,7 +111,8 @@ class AstroInterpreter:
         query: str,
         state: SimulationState,
         last_result: Optional[RunResult] = None,
-        last_compute: Optional[tuple] = None
+        last_compute: Optional[tuple] = None,
+        gr_info: Optional[str] = None
     ) -> str:
         """
         Versatile entry point for AI interaction. Decides which context 
@@ -120,39 +121,62 @@ class AstroInterpreter:
         query_lower = query.lower()
         context_parts = []
         
-        # 1. Check for body names
-        for body in state.bodies:
-            if body.name.lower() in query_lower:
+        # 1. Classify intent
+        intent = "GENERAL"
+        bh_keywords = {"blackhole", "bh", "kerr", "schwarzschild", "horizon", "ergosphere", "photon sphere", "isco", "frame dragging"}
+        n_body_keywords = {"state", "result", "compute", "system", "body", "orbit", "energy"}
+        
+        if query_lower.startswith("bh:") or any(kw in query_lower for kw in bh_keywords):
+            intent = "BLACKHOLE"
+        elif any(kw in query_lower for kw in n_body_keywords) or any(b.name.lower() in query_lower for b in state.bodies):
+            intent = "N_BODY"
+
+        # 2. Gather Context
+        if intent == "BLACKHOLE":
+            if not gr_info:
+                return "\n  [!] Error: General Relativity context is missing. Please create a black hole using 'blackhole create' to compute this.\n"
+            context_parts.append(
+                f"--- Target Intent: BLACK HOLE / GR ---\n"
+                f"--- Black Hole Data ---\n"
+                f"{gr_info}"
+            )
+            if "compute" in query_lower and last_compute:
+                cmd, res, kwargs = last_compute
                 context_parts.append(
-                    f"--- Body Context: {body.name} ---\n"
-                    f"{json.dumps(body.to_dict(), indent=2)}"
+                    f"--- Latest Computation Result ---\n"
+                    f"Command: {cmd}\n"
+                    f"Arguments: {kwargs}\n"
+                    f"Numeric Result: {res}"
                 )
 
-        # 2. Check for explicit keywords
-        if "state" in query_lower:
+        elif intent == "N_BODY":
+            if not state.bodies:
+                return "\n  [!] Warning: N-Body simulation context required, but no bodies exist in current state.\n"
+                
             bodies_summary = [b.to_dict() for b in state.bodies]
             context_parts.append(
+                f"--- Target Intent: N-BODY SIMULATION ---\n"
                 f"--- Overall Simulation State ---\n"
                 f"Time: {state.time:.2e}s | Step: {state.step} | Timestep: {state.dt}s\n"
                 f"Active Bodies: {len(state.bodies)}\n"
                 f"Bodies Detail: {json.dumps(bodies_summary, indent=2)}"
             )
 
-        if "result" in query_lower and last_result:
-            context_parts.append(
-                f"--- Latest Simulation Result ---\n"
-                f"Duration: {last_result.elapsed_time:.2e}s | Steps: {last_result.steps_taken}\n"
-                f"Collisions: {len(last_result.collisions)} recorded."
-            )
+            if "result" in query_lower and last_result:
+                context_parts.append(
+                    f"--- Latest Simulation Result ---\n"
+                    f"Duration: {last_result.elapsed_time:.2e}s | Steps: {last_result.steps_taken}\n"
+                    f"Collisions: {len(last_result.collisions)} recorded."
+                )
 
-        if "compute" in query_lower and last_compute:
-            cmd, res, kwargs = last_compute
-            context_parts.append(
-                f"--- Latest Computation Result ---\n"
-                f"Command: {cmd}\n"
-                f"Arguments: {kwargs}\n"
-                f"Numeric Result: {res}"
-            )
+            if "compute" in query_lower and last_compute:
+                cmd, res, kwargs = last_compute
+                context_parts.append(
+                    f"--- Latest Computation Result ---\n"
+                    f"Command: {cmd}\n"
+                    f"Arguments: {kwargs}\n"
+                    f"Numeric Result: {res}"
+                )
 
         # Build final prompt
         if context_parts:

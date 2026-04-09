@@ -806,12 +806,15 @@ Examples:
         interpreter = AstroInterpreter(provider=provider, model=model, api_key=key)
 
         print(f"\n  [*] Consulting Professor Claude ({model})...")
+        gr_info = self._gr_engine.format_info() if self._gr_engine else None
+        
         try:
             explanation = interpreter.ask(
                 query=query,
                 state=self.manager.state,
                 last_result=self._last_result,
-                last_compute=self._last_compute
+                last_compute=self._last_compute,
+                gr_info=gr_info
             )
             self._print_wrapped(explanation)
         except Exception as exc:
