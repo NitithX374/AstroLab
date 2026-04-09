@@ -50,7 +50,7 @@ async def get_real_llm_stream(context_messages: list, user_id: str):
     # 3. Stream from Anthropic
     try:
         async with anthropic_client.messages.stream(
-            model="claude-3-5-sonnet-20241022",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1024,
             system=system_prompt,
             messages=context_messages
