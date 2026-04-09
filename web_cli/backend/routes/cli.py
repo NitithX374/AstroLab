@@ -52,17 +52,17 @@ async def get_real_llm_stream(context_messages: list, user_id: str):
             gr_context = "GR Engine: No active standalone black hole."
             if hasattr(cli, '_bh_config') and getattr(cli, '_bh_config') is not None:
                 bh = cli._bh_config
-                gr_context = f"GR Engine Active Black Hole: Mass {bh.mass_kg:.4e} kg, Spin {bh.spin}, Metric {bh.metric_type}."
+                gr_context = f"GR Engine Active Black Hole: Mass {bh.mass_kg:.4e} kg (~{bh.mass_kg / 1.989e30:.4e} Solar Masses), Schwarzschild Radius {bh.schwarzschild_radius_km:.4e} km, Spin {bh.spin}, Metric {bh.metric_type}."
                 
             sim_state_summary = f"CURRENT SIMULATION CONTEXT:\n- {nbody_context}\n- {gr_context}\n"
     else:
         if needs_context:
             sim_state_summary = "CURRENT SIMULATION CONTEXT: No simulation state available.\n"
 
-    # 2. Inject this as a System Prompt
     system_prompt = (
         "You are the AstroLab AI assistant. You provide expert guidance on astrophysics, "
         "General Relativity (GR), black hole mechanics, and orbital dynamics. "
+        "DO NOT Perform any math calculations! Just answer and analyze directly from the data that is parsed to you. "
         "AstroLab is an advanced simulation engine that fully supports N-body gravity, "
         "Schwarzschild/Kerr black hole metrics, relativistic effects, and geodesic integrators.\n"
         "NEVER claim that black holes or GR are 'outside AstroLab's scope', as they are core to the platform.\n"
