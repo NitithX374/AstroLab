@@ -277,16 +277,24 @@ export default function TerminalScreen({ onLogout }) {
         const lines = chunk.split('\n');
         for (const line of lines) {
           if (line.startsWith('data: ')) {
-            const data = line.slice(6).trim();
-            if (data === '[DONE]') {
+            const dataStr = line.slice(6).trim();
+            if (dataStr === '[DONE]') {
               // End of stream
               break;
-            } else if (data.startsWith('[ERROR]')) {
-              term.write(`\r\n\x1b[1;31mSystem Error:\x1b[0m ${data.slice(7)}\r\n`);
+            } else if (dataStr.startsWith('[ERROR]')) {
+              term.write(`\r\n\x1b[1;31mSystem Error:\x1b[0m ${dataStr.slice(7)}\r\n`);
               break;
             } else {
               // Write token
-              term.write(data);
+              try {
+                const payload = JSON.parse(dataStr);
+                if (payload.text) {
+                  const formattedText = payload.text.replace(/(?<!\r)\n/g, '\r\n');
+                  term.write(formattedText);
+                }
+              } catch (e) {
+                // Ignore incomplete
+              }
             }
           }
         }

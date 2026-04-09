@@ -114,7 +114,8 @@ async def ask_stream(request: Request, ask_req: AskRequest, current_user: dict =
                 async for token in get_real_llm_stream(anthropic_messages, str(user_id)):
                     full_response += token
                     token_count += 1
-                    yield f"data: {token}\n\n"
+                    payload = json.dumps({"text": token})
+                    yield f"data: {payload}\n\n"
                     
             bot_msg = {
                 "conversation_id": conv_id,
