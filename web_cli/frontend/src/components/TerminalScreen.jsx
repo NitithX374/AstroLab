@@ -28,8 +28,8 @@ export default function TerminalScreen({ onLogout }) {
   const history = useRef([]);
   const historyIndex = useRef(-1);
   const isStreaming = useRef(false);
-
   const isQueryMode = useRef(false);
+  const chatHistory = useRef([]); // Stores {role: 'user'|'assistant', content: string}
 
   useEffect(() => {
     // Initialize xterm
@@ -283,13 +283,23 @@ export default function TerminalScreen({ onLogout }) {
     isStreaming.current = true;
     const term = termInstance.current;
     
+    // 1. Add user message to history
+    chatHistory.current.push({ role: 'user', content: prompt });
+    // Keep only last 10 messages for context
+    if (chatHistory.current.length > 10) chatHistory.current.shift();
+
     term.write('\x1b[1;34mSystem:\x1b[0m ');
+
+    let fullResponse = "";
 
     try {
       const response = await fetch(`${API_BASE_URL}/ask/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({ 
+          prompt: prompt,
+          messages: chatHistory.current
+        }),
         credentials: 'include'
       });
 
@@ -324,6 +334,7 @@ export default function TerminalScreen({ onLogout }) {
                 if (payload.text) {
                   const formattedText = payload.text.replace(/(?<!\r)\n/g, '\r\n');
                   term.write(formattedText);
+                  fullResponse += payload.text;
                 }
               } catch (e) {
                 // Ignore incomplete
@@ -332,6 +343,12 @@ export default function TerminalScreen({ onLogout }) {
           }
         }
       }
+      
+      // 2. Add assistant response to history
+      if (fullResponse) {
+        chatHistory.current.push({ role: 'assistant', content: fullResponse });
+      }
+
       term.writeln(''); // newline after response
     } catch (error) {
       term.writeln(`\r\n\x1b[1;31mNetwork Error:\x1b[0m ${error.message}`);

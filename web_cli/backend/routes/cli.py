@@ -29,32 +29,29 @@ async def get_real_llm_stream(context_messages: list, user_id: str):
         yield "[ERROR] Anthropic API Key is missing in Render environment variables."
         return
 
-    from astrolab_session import get_astrolab_session
+    from astrolab_session import get_astrolab_session, get_session_state_summary
     
-    # 1. Get the actual simulation state from this user's Python engine
+    # 1. Get the actual simulation state
     cli = get_astrolab_session(user_id)
     sim_state_summary = ""
     
+    # Diagnostic Logging
+    body_count = len(cli.manager.get_all_bodies()) if hasattr(cli, 'manager') else 0
+    print(f"DEBUG [ask]: user={user_id} | bodies={body_count} | bh={'YES' if getattr(cli, '_bh_config', None) else 'NO'}")
+
     # Optimize tokens: only inject simulation state if relevant keywords or body names are mentioned
-    user_prompt = context_messages[-1]['content'].lower() if context_messages else ""
-    keywords = ["body", "state", "blackhole", "result", "compute", "simulate", "simulation", "orbit", "system"]
-    needs_context = any(kw in user_prompt for kw in keywords)
+    # Scan the entire current context window (usually 1-5 messages in web flow)
+    full_prompt_text = " ".join([m['content'].lower() for m in context_messages])
+    keywords = ["body", "state", "blackhole", "result", "compute", "simulate", "simulation", "orbit", "system", "earth", "sun", "moon", "solar"]
+    needs_context = any(kw in full_prompt_text for kw in keywords)
     
     if hasattr(cli, 'manager') and cli.manager.state:
         body_names = [b.name.lower() for b in cli.manager.state.bodies]
-        if any(b_name in user_prompt for b_name in body_names):
+        if any(b_name in full_prompt_text for b_name in body_names):
             needs_context = True
             
         if needs_context:
-            bodies = [f"{b.name} ({b.body_type})" for b in cli.manager.state.bodies]
-            nbody_context = f"N-Body Engine: {', '.join(bodies) if bodies else 'None'}. Timestep (dt): {cli.manager.state.dt}s."
-            
-            gr_context = "GR Engine: No active standalone black hole."
-            if hasattr(cli, '_bh_config') and getattr(cli, '_bh_config') is not None:
-                bh = cli._bh_config
-                gr_context = f"GR Engine Active Black Hole: Mass {bh.mass_kg:.4e} kg (~{bh.mass_kg / 1.989e30:.4e} Solar Masses), Schwarzschild Radius {bh.schwarzschild_radius_km:.4e} km, Spin {bh.spin}, Metric {bh.metric_type}."
-                
-            sim_state_summary = f"CURRENT SIMULATION CONTEXT:\n- {nbody_context}\n- {gr_context}\n"
+            sim_state_summary = f"CURRENT SIMULATION CONTEXT:\n{get_session_state_summary(user_id)}\n"
     else:
         if needs_context:
             sim_state_summary = "CURRENT SIMULATION CONTEXT: No simulation state available.\n"

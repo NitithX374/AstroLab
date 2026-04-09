@@ -46,6 +46,31 @@ def clear_astrolab_session(user_id: str) -> None:
     if user_id in active_sessions:
         del active_sessions[user_id]
 
+def get_session_state_summary(user_id: str) -> str:
+    """Returns a formatted summary of the current session state for AI context."""
+    if user_id not in active_sessions:
+        return "No active session."
+    
+    cli = active_sessions[user_id]["cli"]
+    summary_parts = []
+    
+    # N-Body State
+    if hasattr(cli, 'manager') and cli.manager.state:
+        bodies = cli.manager.get_all_bodies()
+        body_list = [f"{b.name} ({b.body_type})" for b in bodies]
+        nbody_sum = f"N-Body Engine: {', '.join(body_list) if body_list else 'No bodies loaded'}. Timestep: {cli.manager.state.dt}s."
+        summary_parts.append(f"- {nbody_sum}")
+    
+    # GR / Black Hole State
+    if hasattr(cli, '_bh_config') and cli._bh_config is not None:
+        bh = cli._bh_config
+        gr_sum = f"Active Black Hole: Mass {bh.mass_kg:.4e} kg (~{bh.mass_kg / 1.989e30:.4e} M_solar), metric={bh.metric_type}, spin={bh.spin}."
+        summary_parts.append(f"- GR Engine: {gr_sum}")
+    else:
+        summary_parts.append("- GR Engine: No active standalone black hole.")
+
+    return "\n".join(summary_parts)
+
 async def cleanup_idle_sessions():
     """Background task to remove idle sessions and prevent memory leaks."""
     while True:
