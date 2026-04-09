@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from passlib.context import CryptContext
+import os
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 import jwt
@@ -7,7 +8,7 @@ from typing import Optional
 from database import db
 
 # JWT Configuration
-SECRET_KEY = "your-very-secret-key-change-in-production"
+SECRET_KEY = os.getenv("SECRET_KEY", "your-very-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30 * 24 * 60 # 30 days
 
@@ -26,7 +27,8 @@ def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password):
-    return pwd_context.hash(password)
+    # Bcrypt has a 72-byte limit. We truncate here to avoid ValueError in some environments.
+    return pwd_context.hash(password[:72])
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
@@ -97,7 +99,7 @@ async def login(response: Response, user: UserLogin):
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         expires=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         samesite="lax",
-        secure=False # Set to True in production with HTTPS
+        secure=True # Always True in production for HTTPS
     )
     return {"message": "Login successful"}
 
