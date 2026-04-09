@@ -47,7 +47,14 @@ async def get_real_llm_stream(context_messages: list, user_id: str):
             
         if needs_context:
             bodies = [f"{b.name} ({b.body_type})" for b in cli.manager.state.bodies]
-            sim_state_summary = f"CURRENT SIMULATION CONTEXT: Current bodies in simulation: {', '.join(bodies)}. Timestep (dt): {cli.manager.state.dt}s.\n"
+            nbody_context = f"N-Body Engine: {', '.join(bodies) if bodies else 'None'}. Timestep (dt): {cli.manager.state.dt}s."
+            
+            gr_context = "GR Engine: No active standalone black hole."
+            if hasattr(cli, '_bh_config') and getattr(cli, '_bh_config') is not None:
+                bh = cli._bh_config
+                gr_context = f"GR Engine Active Black Hole: Mass {bh.mass_kg:.4e} kg, Spin {bh.spin}, Metric {bh.metric_type}."
+                
+            sim_state_summary = f"CURRENT SIMULATION CONTEXT:\n- {nbody_context}\n- {gr_context}\n"
     else:
         if needs_context:
             sim_state_summary = "CURRENT SIMULATION CONTEXT: No simulation state available.\n"
