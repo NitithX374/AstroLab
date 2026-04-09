@@ -7,7 +7,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from database import connect_to_mongo, close_mongo_connection
-from routes import auth, cli
+from routes import auth, cli, engine
+from astrolab_session import cleanup_idle_sessions
+import asyncio
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -17,6 +19,10 @@ limiter = Limiter(key_func=get_remote_address)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await connect_to_mongo()
+    
+    # Start background cleanup task for inactive Astrolab CLI sessions
+    asyncio.create_task(cleanup_idle_sessions())
+    
     yield
     await close_mongo_connection()
 
@@ -27,6 +33,7 @@ origins = [o.strip() for o in env_origins.split(",")]
 
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(cli.router, tags=["cli"])
+app.include_router(engine.router, tags=["engine"])
 
 # Custom Rate Limit Middleware
 @app.middleware("http")

@@ -139,6 +139,7 @@ export default function TerminalScreen({ onLogout }) {
       term.writeln('  \x1b[1;33mclear\x1b[0m   - Clear terminal output');
       term.writeln('  \x1b[1;33mhistory\x1b[0m - Show command history');
       term.writeln('  \x1b[1;33mask\x1b[0m     - Ask the AI (e.g. ask <prompt>)');
+      term.writeln('  \x1b[1;32m[any]\x1b[0m   - Send AstroLab physics command (e.g. demo, simulate, show state)');
       promptUser();
       return;
     }
@@ -161,7 +162,59 @@ export default function TerminalScreen({ onLogout }) {
       return;
     }
 
-    term.writeln(`\x1b[1;31mError:\x1b[0m Command not found: ${cmd}`);
+    // Instead of Command Not Found, assume it's an AstroLab command
+    await handleExecutionStream(cmd);
+  };
+
+  const handleExecutionStream = async (command) => {
+    isStreaming.current = true;
+    const term = termInstance.current;
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/execute/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command }),
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        const chunk = decoder.decode(value, { stream: true });
+        
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6).trim();
+            if (dataStr === '{"text": "[DONE]"}') {
+              break; // End of stream
+            }
+            try {
+                const payload = JSON.parse(dataStr);
+                if (payload.text) {
+                    // Standard xterm chunk write, \r natively handled
+                    term.write(payload.text);
+                }
+            } catch (e) {
+                // Ignore incomplete JSON chunks from splitting
+            }
+          }
+        }
+      }
+    } catch (error) {
+      term.writeln(`\r\n\x1b[1;31mServer Error:\x1b[0m ${error.message}`);
+    }
+    
+    isStreaming.current = false;
     promptUser();
   };
 
