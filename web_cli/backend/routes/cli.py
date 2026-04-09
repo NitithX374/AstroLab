@@ -96,7 +96,7 @@ async def get_or_create_conversation(user_id: ObjectId):
 @router.post("/ask/stream")
 @limiter.limit("5/second")
 async def ask_stream(request: Request, ask_req: AskRequest, current_user: dict = Depends(get_current_user)):
-    user_id = current_user["_id"]
+    user_id = str(current_user["_id"])
     conv = await get_or_create_conversation(user_id)
     conv_id = conv["_id"]
     
@@ -181,7 +181,7 @@ async def ask_stream(request: Request, ask_req: AskRequest, current_user: dict =
 @router.post("/ask")
 @limiter.limit("5/second")
 async def ask_sync(request: Request, ask_req: AskRequest, current_user: dict = Depends(get_current_user)):
-    user_id = current_user["_id"]
+    user_id = str(current_user["_id"])
     conv = await get_or_create_conversation(user_id)
     conv_id = conv["_id"]
     
