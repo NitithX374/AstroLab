@@ -149,13 +149,15 @@ export default function TerminalScreen({ onLogout }) {
     }
 
     if (cmd === 'help') {
-      term.writeln('\x1b[1;36mAVAILABLE COMMANDS:\x1b[0m');
-      term.writeln('  \x1b[1;33mhelp\x1b[0m    - Show this message');
-      term.writeln('  \x1b[1;33mclear\x1b[0m   - Clear terminal output');
-      term.writeln('  \x1b[1;33mhistory\x1b[0m - Show command history');
-      term.writeln('  \x1b[1;33mask\x1b[0m     - Ask the AI (e.g. ask <prompt>)');
-      term.writeln('  \x1b[1;32m[any]\x1b[0m   - Send AstroLab physics command (e.g. demo, simulate, show state)');
-      promptUser();
+      term.writeln('\x1b[1;36mWEB CLI SPECIFIC COMMANDS:\x1b[0m');
+      term.writeln('  \x1b[1;33mclear\x1b[0m     - Clear terminal output');
+      term.writeln('  \x1b[1;33mhistory\x1b[0m   - Show command history');
+      term.writeln('  \x1b[1;33mask\x1b[0m       - Ask the AI (e.g. ask <prompt>)');
+      term.writeln('');
+      term.writeln('\x1b[1;36mASTROLAB PHYSICS COMMANDS (Powered by Python Engine):\x1b[0m');
+      
+      // Pass the 'help' command to the actual Python engine backend
+      await handleExecutionStream('help');
       return;
     }
 
