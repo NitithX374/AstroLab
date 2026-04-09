@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AuthScreen from './components/AuthScreen';
 import TerminalScreen from './components/TerminalScreen';
+import { API_BASE_URL } from './config';
 import './index.css';
 
 function App() {
@@ -9,7 +10,7 @@ function App() {
 
   useEffect(() => {
     // Check if user is already authenticated by calling /me
-    fetch('http://localhost:8000/auth/me', {credentials: 'include'})
+    fetch(`${API_BASE_URL}/auth/me`, {credentials: 'include'})
       .then(res => {
         if (res.ok) {
           setIsAuthenticated(true);
@@ -24,7 +25,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    fetch('http://localhost:8000/auth/logout', { method: 'POST', credentials: 'include' })
+    fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' })
       .then(() => setIsAuthenticated(false));
   };
 

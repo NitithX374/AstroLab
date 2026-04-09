@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { API_BASE_URL } from '../config';
 import 'xterm/css/xterm.css';
 
 const COMMANDS = ['help', 'clear', 'history', 'ask '];
@@ -171,7 +172,7 @@ export default function TerminalScreen({ onLogout }) {
     term.write('\x1b[1;34mSystem:\x1b[0m ');
 
     try {
-      const response = await fetch('http://localhost:8000/ask/stream', {
+      const response = await fetch(`${API_BASE_URL}/ask/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
