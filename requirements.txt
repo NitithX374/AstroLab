@@ -14,5 +14,6 @@ pyqt5               # Qt backend for Vispy (Windows/Linux)
  
 # ── Other Optional ──────────────────────────────────────────────────
 anthropic             # Generative AI explanations (Claude 4.5 Haiku)
+websockets            # UE5 networking bridge (stream command)
 # astropy           # Advanced units (future)
 # rich              # Terminal formatting (future)

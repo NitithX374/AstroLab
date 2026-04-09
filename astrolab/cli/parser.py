@@ -997,6 +997,70 @@ Execute commands from a batch script file.
             print(f"\n  [script:{lineno}] {line}")
             self.onecmd(line)
 
+    # ── stream ───────────────────────────────────────────────────────────────
+
+    def do_stream(self, arg: str) -> None:
+        """
+        Stream physics data to an Unreal Engine 5 client via WebSockets.
+        
+        Usage: stream <steps> [port=12200]
+        """
+        try:
+            from astrolab.networking.broadcaster import SimulationStreamer
+        except ImportError:
+            print("  [!] Error: Unable to import networking module.")
+            return
+
+        tokens = shlex.split(arg)
+        if not tokens:
+            print("  Usage: stream <steps> [port=12200]")
+            return
+
+        try:
+            steps = int(tokens[0])
+        except ValueError:
+            print("  [!] Error: steps must be an integer.")
+            return
+            
+        port = 12200
+        if len(tokens) > 1 and tokens[1].startswith("port="):
+            try:
+                port = int(tokens[1].split("=")[1])
+            except ValueError:
+                pass
+
+        print(f"  [>] Launching AstroLab Bridge on Physics Thread...")
+        streamer = SimulationStreamer(port=port)
+        if not streamer.start():
+            return
+
+        import time
+        from astrolab.engine.simulator import SimulationEngine
+        engine = SimulationEngine(self.manager.state)
+
+        start_t = time.time()
+        print(f"  [>] Solving {steps} frames asynchronously as fast as possible...")
+
+        try:
+            for i in range(steps):
+                engine.step(collision_detection=True)
+                streamer.enqueue_frame(i, engine.state.time, engine.state.bodies)
+                
+                # If solver is so fast it overtakes broadcast loop immensely, yield a tiny bit.
+                # In most heavy N-Body scenarios, solving takes considerable time.
+                if i % 1000 == 0 and i > 0:
+                    print(f"      ... computed {i} frames")
+        except KeyboardInterrupt:
+            print("\n  [!] Stream aborted by user.")
+
+        elapsed = time.time() - start_t
+        hz = steps / elapsed if elapsed > 0 else 0
+        print(f"  [>] Physics loop completed: {steps} frames in {elapsed:.2f}s ({hz:.1f} UPS)")
+        
+        # Shutdown
+        print("  [>] Shutting down broadcaster...")
+        streamer.stop()
+
     # ── blackhole ─────────────────────────────────────────────────────────────
 
     def do_blackhole(self, arg: str) -> None:
