@@ -59,7 +59,8 @@ export default function TerminalScreen({ onLogout }) {
     termInstance.current = term;
     fitAddonInstance.current = fitAddon;
 
-    term.write(BANNER);
+    // xterm.js strictly requires \r\n for line breaks. Template literals use \n.
+    term.write(BANNER.replace(/\n/g, '\r\n'));
     term.writeln('');
     promptUser();
 
