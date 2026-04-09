@@ -29,6 +29,8 @@ export default function TerminalScreen({ onLogout }) {
   const historyIndex = useRef(-1);
   const isStreaming = useRef(false);
 
+  const isQueryMode = useRef(false);
+
   useEffect(() => {
     // Initialize xterm
     const term = new Terminal({
@@ -99,10 +101,12 @@ export default function TerminalScreen({ onLogout }) {
           }
         }
       } else if (domEvent.keyCode === 9) { // Tab (Autocomplete)
-        const partial = inputBuffer.current;
-        const match = COMMANDS.find(cmd => cmd.startsWith(partial));
-        if (match) {
-          replaceInput(match);
+        if (!isQueryMode.current) {
+          const partial = inputBuffer.current;
+          const match = COMMANDS.find(cmd => cmd.startsWith(partial));
+          if (match) {
+            replaceInput(match);
+          }
         }
       } else if (printable) {
         inputBuffer.current += key;
@@ -129,7 +133,11 @@ export default function TerminalScreen({ onLogout }) {
   const promptUser = () => {
     inputBuffer.current = '';
     historyIndex.current = -1;
-    termInstance.current.write('\x1b[1;32mastrolab>\x1b[0m ');
+    if (isQueryMode.current) {
+      termInstance.current.write('\x1b[1;35mquery>\x1b[0m ');
+    } else {
+      termInstance.current.write('\x1b[1;32mastrolab>\x1b[0m ');
+    }
   };
 
   const handleCommand = async (cmd) => {
@@ -141,6 +149,29 @@ export default function TerminalScreen({ onLogout }) {
     }
 
     history.current.push(cmd);
+    
+    if (isQueryMode.current) {
+      if (cmd.toLowerCase() === 'exit') {
+        term.writeln('\x1b[1;33mexiting LLM query mode...\x1b[0m');
+        isQueryMode.current = false;
+        promptUser();
+        return;
+      }
+      if (cmd === 'clear') {
+        term.clear();
+        promptUser();
+        return;
+      }
+      await handleAskStream(cmd);
+      return;
+    }
+
+    if (cmd === 'ask') {
+      term.writeln('\x1b[1;35m>>>entering LLM query mode (type "exit" to leave)\x1b[0m');
+      isQueryMode.current = true;
+      promptUser();
+      return;
+    }
 
     if (cmd === 'clear') {
       term.clear();
@@ -152,7 +183,8 @@ export default function TerminalScreen({ onLogout }) {
       term.writeln('\x1b[1;36mWEB CLI SPECIFIC COMMANDS:\x1b[0m');
       term.writeln('  \x1b[1;33mclear\x1b[0m     - Clear terminal output');
       term.writeln('  \x1b[1;33mhistory\x1b[0m   - Show command history');
-      term.writeln('  \x1b[1;33mask\x1b[0m       - Ask the AI (e.g. ask <prompt>)');
+      term.writeln('  \x1b[1;33mask\x1b[0m       - Enter continuous AI conversation mode');
+      term.writeln('  \x1b[1;33mask <q>\x1b[0m   - Ask a single AI question');
       term.writeln('');
       term.writeln('\x1b[1;36mASTROLAB PHYSICS COMMANDS (Powered by Python Engine):\x1b[0m');
       
