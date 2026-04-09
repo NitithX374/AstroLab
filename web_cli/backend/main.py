@@ -45,11 +45,15 @@ app.include_router(auth.router, prefix="/auth", tags=["auth"])
 # Actually slowapi requires decorating the endpoints. I'll modify the cli endpoints below directly.
 
 # Applying rate limit directly to the app routes imported from cli
-# I'll just apply it globally for /ask endpoints
 @app.middleware("http")
 async def apply_rate_limit(request: Request, call_next):
+    # CRITICAL: Allow CORS preflight requests (OPTIONS) to pass through without checks or rate limiting
+    if request.method == "OPTIONS":
+        return await call_next(request)
+        
     if request.url.path.startswith("/ask"):
-        # simple manual rate limit logic could go here, or we use slowapi on the router directly.
+        # slowapi is already handling decorating specific routes, 
+        # but we keep this middleware block for general request tracking if needed.
         pass
     return await call_next(request)
 
