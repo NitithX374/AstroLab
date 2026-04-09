@@ -11,3 +11,4 @@ anthropic>=0.18.0
 plotly>=6.6.0
 vispy>=0.14.1
 pyqt5>=5.15.10
+numpy>=2.4.4
