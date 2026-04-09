@@ -222,6 +222,15 @@ export default function TerminalScreen({ onLogout }) {
                     // Python print() usually just outputs \n.
                     const formattedText = payload.text.replace(/(?<!\r)\n/g, '\r\n');
                     term.write(formattedText);
+                    
+                    // Hook for opening visualization output on web
+                    const vizMatch = payload.text.match(/Plotly orbit chart saved → '([^']+)'/);
+                    if (vizMatch) {
+                      const filename = vizMatch[1];
+                      setTimeout(() => {
+                        window.open(`${API_BASE_URL}/outputs/${filename}`, '_blank');
+                      }, 500);
+                    }
                 }
             } catch (e) {
                 // Ignore incomplete JSON chunks from splitting

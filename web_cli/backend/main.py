@@ -5,6 +5,7 @@ load_dotenv() # Load variables from .env file
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from database import connect_to_mongo, close_mongo_connection
 from routes import auth, cli, engine
@@ -34,6 +35,10 @@ origins = [o.strip() for o in env_origins.split(",")]
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(cli.router, tags=["cli"])
 app.include_router(engine.router, tags=["engine"])
+
+# Mount AstroLab root to serve generated HTML visualization files
+outputs_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+app.mount("/outputs", StaticFiles(directory=outputs_dir), name="outputs")
 
 # Custom Rate Limit Middleware
 @app.middleware("http")
