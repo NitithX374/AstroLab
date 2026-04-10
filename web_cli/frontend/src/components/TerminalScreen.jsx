@@ -35,6 +35,7 @@ export default function TerminalScreen({ onLogout }) {
     // Initialize xterm
     const term = new Terminal({
       cursorBlink: true,
+      scrollback: 5000,
       theme: {
         background: '#0B0E14',
         foreground: '#E2E8F0',
@@ -66,8 +67,15 @@ export default function TerminalScreen({ onLogout }) {
     term.writeln('');
     promptUser();
 
-    // Handle Resize
-    const resizeListener = () => fitAddon.fit();
+    // Use ResizeObserver on the container itself so xterm reflows
+    // whenever the *element* resizes, not just the window.
+    const ro = new ResizeObserver(() => {
+      try { fitAddon.fit(); } catch (_) {}
+    });
+    ro.observe(terminalRef.current);
+
+    // Keep window resize as a fallback
+    const resizeListener = () => { try { fitAddon.fit(); } catch (_) {} };
     window.addEventListener('resize', resizeListener);
 
     // Keystroke handler
@@ -116,6 +124,7 @@ export default function TerminalScreen({ onLogout }) {
 
     return () => {
       window.removeEventListener('resize', resizeListener);
+      ro.disconnect();
       term.dispose();
     };
   }, []);

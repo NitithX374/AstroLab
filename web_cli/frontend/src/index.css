@@ -33,11 +33,11 @@ body {
   background-color: var(--bg-base);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  min-height: 100vh;
+  height: 100vh;           /* definite height so flex children can shrink */
+  overflow: hidden;
   display: flex;
   justify-content: center;
   align-items: center;
-  overflow: hidden;
   background-image: 
     radial-gradient(circle at 15% 50%, rgba(58, 134, 255, 0.15), transparent 25%),
     radial-gradient(circle at 85% 30%, rgba(131, 56, 236, 0.15), transparent 25%);
@@ -179,6 +179,7 @@ body {
 .terminal-wrapper {
   width: 95vw;
   height: 90vh;
+  min-height: 0;          /* critical for flex children not to overflow */
   background: #0f111a;
   border: var(--glass-border);
   border-radius: 1rem;
@@ -190,12 +191,14 @@ body {
 }
 
 .terminal-header {
+  flex-shrink: 0;          /* never shrink the header */
   height: 48px;
   background: rgba(255, 255, 255, 0.03);
   display: flex;
   align-items: center;
   padding: 0 1rem;
   border-bottom: var(--glass-border);
+  position: relative;      /* needed for absolute terminal-title */
 }
 
 .mac-controls {
@@ -232,28 +235,60 @@ body {
   font-size: 0.8rem;
   cursor: pointer;
   transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 .terminal-logout:hover {
   background: rgba(255, 255, 255, 0.1);
   color: white;
 }
 
+/* This is the div xterm mounts into — must have a known height */
 .terminal-container {
-  flex: 1;
-  padding: 1.5rem;
+  flex: 1 1 0;             /* grow AND shrink, start from 0 */
+  min-height: 0;           /* allow shrinking below content height */
+  padding: 12px 8px 8px 12px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
+/* xterm root element must fill the container */
 .xterm {
-  height: 100%;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100% !important;
+  height: 100% !important;
 }
 
+.xterm-dom-renderer-owner-1 {
+  height: 100% !important;
+}
+
+/* The viewport is where the actual scrollbar lives */
 .xterm .xterm-viewport {
-  border-radius: 8px;
+  border-radius: 6px;
+  overflow-y: auto !important;  /* make scrollbar appear */
+}
+
+/* Style the scrollbar so it's visible and usable */
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 8px;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(58, 134, 255, 0.5);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(58, 134, 255, 0.8);
 }
 
 .xterm .xterm-screen {
-  padding: 0 8px;
+  padding: 0 4px;
 }
 
 /* Animations */
