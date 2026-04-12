@@ -99,6 +99,23 @@ async def get_simulation_state(current_user: dict = Depends(get_current_user)):
     }
 
 
+@router.get("/trajectory")
+async def get_trajectory_data(current_user: dict = Depends(get_current_user)):
+    """Return recorded trajectory snapshots + body metadata for the 3D visualizer."""
+    user_id = str(current_user["_id"])
+    cli = get_astrolab_session(user_id)
+
+    if not hasattr(cli, '_recorder') or cli._recorder is None or cli._recorder.snapshot_count() == 0:
+        return {"available": False, "snapshots": [], "meta": {}}
+
+    rec = cli._recorder
+    return {
+        "available": True,
+        "meta": rec._meta,
+        "snapshots": rec._snapshots,
+    }
+
+
 @router.post("/execute/stream")
 async def execute_astrolab_command(request: Request, cmd_req: CommandRequest, current_user: dict = Depends(get_current_user)):
     user_id = str(current_user["_id"])

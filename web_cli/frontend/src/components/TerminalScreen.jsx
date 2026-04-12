@@ -3,6 +3,7 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { API_BASE_URL } from '../config';
 import 'xterm/css/xterm.css';
+import OrbitVisualizer from './OrbitVisualizer';
 
 const COMMANDS = ['help', 'clear', 'history', 'ask', 'simulate', 'show', 'create', 'demo'];
 
@@ -215,6 +216,8 @@ export default function TerminalScreen({ onLogout }) {
 
   const [simState, setSimState]     = useState(null);
   const [stateLoading, setStateLoading] = useState(false);
+  const [showVisualizer, setShowVisualizer] = useState(false);
+  const vizTriggerRef = useRef(false); // flag to auto-show after simulate with visualize=on
 
   // Fetch simulation state from backend
   const refreshState = useCallback(async () => {
@@ -360,6 +363,19 @@ export default function TerminalScreen({ onLogout }) {
 
     if (cmdLower === 'clear') { term.clear(); promptUser(); return; }
 
+    // Intercept 'visualize orbits' to open the 3D replay
+    if (cmdLower.startsWith('visualize orbits') || cmdLower === 'visualize orbits') {
+      setShowVisualizer(true);
+      term.writeln('\x1b[1;36m  [*] Opening 3D orbit visualizer…\x1b[0m');
+      promptUser();
+      return;
+    }
+
+    // Detect if simulate command includes visualize=on for auto-show
+    if (cmdLower.startsWith('simulate') && cmdLower.includes('visualize=on')) {
+      vizTriggerRef.current = true;
+    }
+
     if (cmdLower === 'ask') {
       term.writeln('\x1b[1;35m>>> entering AI Chat mode (type "exit" to leave)\x1b[0m');
       isQueryMode.current = true;
@@ -447,6 +463,12 @@ export default function TerminalScreen({ onLogout }) {
     promptUser();
     // Refresh the right panel after every engine command
     refreshState();
+
+    // Auto-show visualizer after simulate with visualize=on
+    if (vizTriggerRef.current) {
+      vizTriggerRef.current = false;
+      setShowVisualizer(true);
+    }
   };
 
   const handleAskStream = async (prompt) => {
@@ -535,6 +557,12 @@ export default function TerminalScreen({ onLogout }) {
           <InspectorPanel state={simState} loading={stateLoading} />
         </div>
       </div>
+
+      {/* ── 3D Orbit Visualizer ── */}
+      <OrbitVisualizer
+        visible={showVisualizer}
+        onClose={() => setShowVisualizer(false)}
+      />
     </div>
   );
 }
