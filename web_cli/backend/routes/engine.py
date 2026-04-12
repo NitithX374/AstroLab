@@ -47,6 +47,58 @@ def execute_command_in_thread(cli, command: str, out_queue: Queue):
         cli.stdout = original_stdout
         out_queue.put("[DONE]")
 
+@router.get("/state")
+async def get_simulation_state(current_user: dict = Depends(get_current_user)):
+    """Return structured simulation state for the right-panel Body Inspector."""
+    user_id = str(current_user["_id"])
+    cli = get_astrolab_session(user_id)
+
+    bodies = []
+    sim_time = 0.0
+    sim_step = 0
+    sim_dt = 60.0
+    bh_config = None
+
+    G = 6.6743e-11
+    c = 299792458.0
+
+    if hasattr(cli, 'manager') and cli.manager.state:
+        state = cli.manager.state
+        sim_time = state.time
+        sim_step = getattr(state, 'step', 0)
+        sim_dt = state.dt
+
+        for b in state.bodies:
+            # Schwarzschild radius: r_s = 2GM/c²
+            r_s = (2 * G * b.mass) / (c ** 2)
+            bodies.append({
+                "name": b.name,
+                "type": b.body_type,
+                "mass_kg": b.mass,
+                "radius_m": b.radius,
+                "schwarzschild_radius_m": r_s,
+                "position": {"x": b.position.x, "y": b.position.y, "z": b.position.z},
+                "velocity": {"x": b.velocity.x, "y": b.velocity.y, "z": b.velocity.z},
+            })
+
+    if hasattr(cli, '_bh_config') and cli._bh_config is not None:
+        bh = cli._bh_config
+        bh_config = {
+            "mass_kg": bh.mass_kg,
+            "metric": bh.metric_type,
+            "spin": bh.spin,
+            "schwarzschild_radius_km": bh.schwarzschild_radius_km,
+        }
+
+    return {
+        "bodies": bodies,
+        "sim_time_s": sim_time,
+        "sim_step": sim_step,
+        "sim_dt_s": sim_dt,
+        "bh_config": bh_config,
+    }
+
+
 @router.post("/execute/stream")
 async def execute_astrolab_command(request: Request, cmd_req: CommandRequest, current_user: dict = Depends(get_current_user)):
     user_id = str(current_user["_id"])
