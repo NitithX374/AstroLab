@@ -19,7 +19,6 @@ const SPEED_OPTIONS = [0.5, 1, 2, 5, 10];
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Normalize all snapshot positions into a [-viewRadius, viewRadius] cube. */
 function normalizeTrajectory(snapshots, meta, viewRadius = 40) {
   if (!snapshots || snapshots.length === 0) return { snapshots: [], scale: 1 };
 
@@ -47,7 +46,6 @@ function normalizeTrajectory(snapshots, meta, viewRadius = 40) {
   return { snapshots: normalized, scale };
 }
 
-/** Return a log-scaled sphere radius for display. */
 function bodyDisplayRadius(mass, type) {
   if (!mass || mass <= 0) return 0.3;
   const logMass = Math.log10(mass);
@@ -74,56 +72,6 @@ function formatTime(s) {
   return `${(s / 31536000).toFixed(2)} yr`;
 }
 
-// ── 3D Body Sphere ───────────────────────────────────────────────────────────
-function BodySphere({ position, color, radius, name, showLabel, emissive }) {
-  const meshRef = useRef();
-  return (
-    <group position={position}>
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[radius, 32, 32]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={emissive ? color : '#000000'}
-          emissiveIntensity={emissive ? 0.6 : 0}
-          roughness={0.4}
-          metalness={0.1}
-        />
-      </mesh>
-      {/* Glow ring */}
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[radius * 1.2, radius * 1.5, 32]} />
-        <meshBasicMaterial color={color} transparent opacity={0.15} side={THREE.DoubleSide} />
-      </mesh>
-      {showLabel && (
-        <Text
-          position={[0, radius + 0.8, 0]}
-          fontSize={0.5}
-          color="#E2E8F0"
-          anchorX="center"
-          anchorY="bottom"
-          font="https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiA.woff2"
-        >
-          {name}
-        </Text>
-      )}
-    </group>
-  );
-}
-
-// ── Orbit Trail ──────────────────────────────────────────────────────────────
-function OrbitTrail({ points, color }) {
-  if (!points || points.length < 2) return null;
-  return (
-    <Line
-      points={points}
-      color={color}
-      lineWidth={1.2}
-      transparent
-      opacity={0.5}
-    />
-  );
-}
-
 // ── Auto-rotate camera for mini mode ─────────────────────────────────────────
 function AutoRotate({ enabled, speed = 0.3 }) {
   const { camera } = useThree();
@@ -139,11 +87,18 @@ function AutoRotate({ enabled, speed = 0.3 }) {
   return null;
 }
 
-// ── Animated Scene ───────────────────────────────────────────────────────────
-function AnimatedScene({ snapshots, meta, isFullMode, playbackRef }) {
-  const bodyPositions = useRef({});
-  const trailPaths = useRef({});
+// ══════════════════════════════════════════════════════════════════════════════
+// SceneContent — renders bodies + trails using IMPERATIVE ref updates.
+//
+// IMPORTANT: NO useState/forceUpdate inside useFrame.
+// Body positions are updated by directly mutating group.position via refs.
+// Trails are updated only when `currentFrame` prop changes (React re-render
+// driven by parent, NOT by useFrame).
+// ══════════════════════════════════════════════════════════════════════════════
+function SceneContent({ snapshots, meta, isFullMode, playbackRef, currentFrame }) {
+  const bodyRefs = useRef({});
 
+  // Pre-compute all trail paths once
   const fullTrails = useMemo(() => {
     const trails = {};
     for (const name of Object.keys(meta)) trails[name] = [];
@@ -156,6 +111,20 @@ function AnimatedScene({ snapshots, meta, isFullMode, playbackRef }) {
     return trails;
   }, [snapshots, meta]);
 
+  // Compute visible trails based on currentFrame (driven by parent state)
+  const visibleTrails = useMemo(() => {
+    const result = {};
+    const idx = Math.min(currentFrame, snapshots.length - 1);
+    for (const name of Object.keys(meta)) {
+      const full = fullTrails[name];
+      if (full && full.length > 1) {
+        result[name] = full.slice(0, Math.min(idx + 1, full.length));
+      }
+    }
+    return result;
+  }, [currentFrame, fullTrails, meta, snapshots.length]);
+
+  // Imperative position updates — NO React re-renders
   useFrame(() => {
     if (!snapshots.length) return;
     const pb = playbackRef.current;
@@ -164,66 +133,80 @@ function AnimatedScene({ snapshots, meta, isFullMode, playbackRef }) {
     const snap = snapshots[idx];
     if (!snap) return;
 
-    const positions = {};
-    for (const b of snap.bodies) positions[b.name] = [b.x, b.y, b.z];
-    bodyPositions.current = positions;
-
-    const partials = {};
-    for (const name of Object.keys(meta)) {
-      const full = fullTrails[name];
-      if (full && full.length > 0) {
-        partials[name] = full.slice(0, Math.min(idx + 1, full.length));
+    for (const b of snap.bodies) {
+      const group = bodyRefs.current[b.name];
+      if (group) {
+        group.position.set(b.x, b.y, b.z);
       }
     }
-    trailPaths.current = partials;
   });
 
-  return (
-    <AnimatedBodies
-      meta={meta}
-      bodyPositions={bodyPositions}
-      trailPaths={trailPaths}
-      isFullMode={isFullMode}
-    />
-  );
-}
-
-function AnimatedBodies({ meta, bodyPositions, trailPaths, isFullMode }) {
-  const [, forceUpdate] = useState(0);
-  useFrame(() => forceUpdate(c => c + 1));
-
   const names = Object.keys(meta);
-  const positions = bodyPositions.current;
-  const trails = trailPaths.current;
 
   return (
-    <>
+    <group>
       {names.map(name => {
-        const pos = positions[name];
-        if (!pos) return null;
         const color = getColor(meta, name);
         const type = meta[name]?.type || 'unknown';
         const mass = meta[name]?.mass || 1e24;
         const radius = bodyDisplayRadius(mass, type);
         const isEmissive = type === 'star' || type === 'black_hole';
 
+        // Initial position from first snapshot
+        const firstSnap = snapshots[0];
+        const firstBody = firstSnap?.bodies?.find(b => b.name === name);
+        const initPos = firstBody ? [firstBody.x, firstBody.y, firstBody.z] : [0, 0, 0];
+
         return (
           <React.Fragment key={name}>
-            <BodySphere
-              position={pos}
-              color={color}
-              radius={radius}
-              name={name}
-              showLabel={isFullMode}
-              emissive={isEmissive}
-            />
-            {trails[name] && trails[name].length > 1 && (
-              <OrbitTrail points={trails[name]} color={color} />
+            {/* Body group — position is mutated by useFrame via ref */}
+            <group
+              ref={el => { if (el) bodyRefs.current[name] = el; }}
+              position={initPos}
+            >
+              <mesh>
+                <sphereGeometry args={[radius, 32, 32]} />
+                <meshStandardMaterial
+                  color={color}
+                  emissive={isEmissive ? color : '#000000'}
+                  emissiveIntensity={isEmissive ? 0.6 : 0}
+                  roughness={0.4}
+                  metalness={0.1}
+                />
+              </mesh>
+              {/* Glow ring */}
+              <mesh rotation={[Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[radius * 1.2, radius * 1.5, 32]} />
+                <meshBasicMaterial color={color} transparent opacity={0.15} side={THREE.DoubleSide} />
+              </mesh>
+              {isFullMode && (
+                <Text
+                  position={[0, radius + 0.8, 0]}
+                  fontSize={0.5}
+                  color="#E2E8F0"
+                  anchorX="center"
+                  anchorY="bottom"
+                  font="https://fonts.gstatic.com/s/inter/v18/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hiA.woff2"
+                >
+                  {name}
+                </Text>
+              )}
+            </group>
+
+            {/* Trail line — only re-renders when currentFrame changes via parent */}
+            {visibleTrails[name] && visibleTrails[name].length > 1 && (
+              <Line
+                points={visibleTrails[name]}
+                color={color}
+                lineWidth={1.2}
+                transparent
+                opacity={0.5}
+              />
             )}
           </React.Fragment>
         );
       })}
-    </>
+    </group>
   );
 }
 
@@ -254,7 +237,7 @@ function PlaybackControls({
             className={`viz-speed-btn ${speed === s ? 'active' : ''}`}
             onClick={() => onSpeedChange(s)}
           >
-            {s}\u00D7
+            {s}{'\u00D7'}
           </button>
         ))}
       </div>
@@ -263,11 +246,14 @@ function PlaybackControls({
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Main OrbitVisualizer Component
+// Main OrbitVisualizer
 //
-// KEY FIX: Uses a SINGLE <Canvas> that is ALWAYS mounted. Mini vs Full mode
-//          is toggled via CSS class on the wrapper div — the canvas DOM node
-//          is never destroyed, so the WebGL context is never lost.
+// Architecture:
+//   - ONE <Canvas> that is ALWAYS mounted (never unmounts → no context loss)
+//   - The wrapper div toggles CSS class for mini ↔ full layout
+//   - Body positions updated via Three.js refs in useFrame (no React rerenders)
+//   - Trail geometry updated only when currentFrame changes (parent-driven)
+//   - Stars use FIXED props — no dynamic count/radius to avoid geometry errors
 // ══════════════════════════════════════════════════════════════════════════════
 export default function OrbitVisualizer({ visible, onClose }) {
   const [isFullMode, setIsFullMode] = useState(false);
@@ -302,12 +288,11 @@ export default function OrbitVisualizer({ visible, onClose }) {
     setLoading(false);
   }, []);
 
-  // Fetch on show
   useEffect(() => {
     if (visible) fetchTrajectory();
   }, [visible, fetchTrajectory]);
 
-  // Playback animation loop
+  // Playback loop — updates currentFrame state at ~30fps
   useEffect(() => {
     if (!visible || !trajectoryData || !isPlaying) {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -335,7 +320,7 @@ export default function OrbitVisualizer({ visible, onClose }) {
     };
   }, [visible, trajectoryData, isPlaying, speed]);
 
-  // Keyboard: Escape to close/minimize
+  // Escape key
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') {
@@ -347,7 +332,7 @@ export default function OrbitVisualizer({ visible, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [isFullMode, onClose]);
 
-  // Collapse when parent hides
+  // Collapse when hidden
   useEffect(() => {
     if (!visible) setIsFullMode(false);
   }, [visible]);
@@ -363,22 +348,17 @@ export default function OrbitVisualizer({ visible, onClose }) {
     setCurrentFrame(frame);
   };
 
-  // ────────────────────────────────────────────────────────────────────────
-  // Render: One wrapper, one Canvas. The wrapper class toggles mini ↔ full.
-  // ────────────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Dark backdrop — only visible in full mode */}
+      {/* Backdrop overlay — full mode only */}
       {isFullMode && (
-        <div
-          className="viz-backdrop"
-          onClick={() => setIsFullMode(false)}
-        />
+        <div className="viz-backdrop" onClick={() => setIsFullMode(false)} />
       )}
 
-      {/* Single persistent panel */}
+      {/* Single persistent panel — class toggles mini/full */}
       <div className={isFullMode ? 'viz-panel viz-panel--full' : 'viz-panel viz-panel--mini'}>
-        {/* Header (full mode only) */}
+
+        {/* Header — full mode only */}
         {isFullMode && (
           <div className="viz-full-header">
             <span className="viz-full-title">{'\u269B'} ORBIT VISUALIZER</span>
@@ -393,7 +373,7 @@ export default function OrbitVisualizer({ visible, onClose }) {
           </div>
         )}
 
-        {/* Canvas area — ALWAYS renders the same Canvas */}
+        {/* Canvas area */}
         <div className="viz-canvas-wrapper">
           {loading ? (
             <div className="viz-loading-full">
@@ -425,16 +405,12 @@ export default function OrbitVisualizer({ visible, onClose }) {
               <color attach="background" args={['#060910']} />
               <ambientLight intensity={0.4} />
               <pointLight position={[0, 0, 0]} intensity={1.8} color="#FFD166" />
-              {isFullMode && <directionalLight position={[20, 30, 10]} intensity={0.3} />}
-              <Stars
-                radius={isFullMode ? 100 : 80}
-                depth={isFullMode ? 50 : 40}
-                count={isFullMode ? 2000 : 800}
-                factor={isFullMode ? 4 : 3}
-                saturation={0.3}
-                fade
-                speed={0.4}
-              />
+              <directionalLight position={[20, 30, 10]} intensity={0.3} />
+
+              {/* Stars — FIXED props, never change after mount */}
+              <Stars radius={100} depth={50} count={1500} factor={4} saturation={0.3} fade speed={0.4} />
+
+              {/* Camera behaviour */}
               <AutoRotate enabled={!isFullMode} speed={0.4} />
               {isFullMode && (
                 <OrbitControls
@@ -450,17 +426,20 @@ export default function OrbitVisualizer({ visible, onClose }) {
               {isFullMode && (
                 <gridHelper args={[100, 20, '#1a2030', '#101620']} position={[0, -15, 0]} />
               )}
-              <AnimatedScene
+
+              {/* Scene content — bodies + trails */}
+              <SceneContent
                 snapshots={trajectoryData.snapshots}
                 meta={trajectoryData.meta}
                 isFullMode={isFullMode}
                 playbackRef={playbackRef}
+                currentFrame={currentFrame}
               />
             </Canvas>
           )}
         </div>
 
-        {/* Mini overlay (click to expand) */}
+        {/* Mini overlay — click to expand */}
         {!isFullMode && trajectoryData && (
           <div className="viz-mini-overlay" onClick={() => setIsFullMode(true)}>
             <span className="viz-mini-label">{'\u25B6'} ORBIT REPLAY</span>
@@ -468,7 +447,7 @@ export default function OrbitVisualizer({ visible, onClose }) {
           </div>
         )}
 
-        {/* Full-mode playback controls */}
+        {/* Playback controls — full mode only */}
         {isFullMode && trajectoryData && totalFrames > 0 && (
           <PlaybackControls
             currentFrame={currentFrame}
