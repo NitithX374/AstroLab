@@ -630,8 +630,32 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* ── Orbit Visualizer: Mini Mode ───────────────────────────────────────────── */
-.viz-mini {
+
+/* ======================================================================== */
+/* Orbit Visualizer: Unified Single-Canvas Panel                            */
+/* ======================================================================== */
+
+/* --- Backdrop (full mode only) ------------------------------------------ */
+.viz-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: fadeIn 0.3s ease;
+}
+
+/* --- Base panel --------------------------------------------------------- */
+.viz-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0a0d14;
+}
+
+/* --- Mini mode: bottom-right corner ------------------------------------- */
+.viz-panel--mini {
   position: fixed;
   bottom: 20px;
   right: 20px;
@@ -639,95 +663,36 @@ body {
   height: 190px;
   border-radius: 12px;
   border: 1px solid rgba(58, 134, 255, 0.2);
-  background: #0a0d14;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(58, 134, 255, 0.12);
-  z-index: 1000;
+  z-index: 9500;
   cursor: pointer;
-  overflow: hidden;
   animation: vizSlideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.viz-mini:hover {
+.viz-panel--mini:hover {
   transform: translateY(-4px) scale(1.02);
   box-shadow: 0 14px 50px rgba(0, 0, 0, 0.7), 0 0 40px rgba(58, 134, 255, 0.2);
   border-color: rgba(58, 134, 255, 0.4);
 }
 
-.viz-mini canvas {
-  width: 100% !important;
-  height: 100% !important;
-}
-
-.viz-mini-overlay {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 8px 12px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  pointer-events: none;
-}
-
-.viz-mini-label {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  color: var(--accent);
-  text-shadow: 0 0 8px rgba(58, 134, 255, 0.5);
-}
-
-.viz-mini-hint {
-  font-size: 0.6rem;
-  color: rgba(148, 163, 184, 0.6);
-  letter-spacing: 0.5px;
-}
-
-.viz-mini-loading,
-.viz-mini-empty {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-secondary);
-  font-size: 0.75rem;
-}
-
-/* ── Orbit Visualizer: Full Mode ───────────────────────────────────────────── */
-.viz-full-overlay {
+/* --- Full mode: centered modal ------------------------------------------ */
+.viz-panel--full {
   position: fixed;
-  inset: 0;
-  z-index: 2000;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: fadeIn 0.3s ease;
-}
-
-.viz-full-container {
-  width: 92vw;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(92vw, 1600px);
   height: 88vh;
-  max-width: 1600px;
-  background: #0a0d14;
-  border: 1px solid rgba(58, 134, 255, 0.15);
   border-radius: 16px;
+  border: 1px solid rgba(58, 134, 255, 0.15);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.8), 0 0 60px rgba(58, 134, 255, 0.1);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  z-index: 9900;
+  cursor: default;
   animation: vizExpandIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* --- Header ------------------------------------------------------------- */
 .viz-full-header {
   flex-shrink: 0;
   height: 44px;
@@ -779,6 +744,7 @@ body {
   border-color: rgba(255, 0, 110, 0.3);
 }
 
+/* --- Canvas wrapper ----------------------------------------------------- */
 .viz-canvas-wrapper {
   flex: 1 1 0;
   min-height: 0;
@@ -808,7 +774,49 @@ body {
   font-size: 0.8rem;
 }
 
-/* ── Playback Controls ─────────────────────────────────────────────────────── */
+/* --- Mini overlay ------------------------------------------------------- */
+.viz-mini-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px 12px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.viz-mini-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  color: var(--accent);
+  text-shadow: 0 0 8px rgba(58, 134, 255, 0.5);
+}
+
+.viz-mini-hint {
+  font-size: 0.6rem;
+  color: rgba(148, 163, 184, 0.6);
+  letter-spacing: 0.5px;
+}
+
+.viz-mini-empty {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+/* --- Playback controls -------------------------------------------------- */
 .viz-controls {
   flex-shrink: 0;
   height: 52px;
@@ -919,13 +927,13 @@ body {
   font-weight: 700;
 }
 
-/* ── Visualizer Animations ─────────────────────────────────────────────────── */
+/* --- Animations --------------------------------------------------------- */
 @keyframes vizSlideIn {
   from { opacity: 0; transform: translateY(30px) scale(0.9); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @keyframes vizExpandIn {
-  from { opacity: 0; transform: scale(0.92); }
-  to   { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.92); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }

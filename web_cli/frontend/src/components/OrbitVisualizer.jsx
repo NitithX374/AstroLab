@@ -1,6 +1,6 @@
 import React, { useRef, useState, useMemo, useCallback, useEffect } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { OrbitControls, Stars, Line, Text, Html } from '@react-three/drei';
+import { OrbitControls, Stars, Line, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import { API_BASE_URL } from '../config';
 
@@ -50,13 +50,11 @@ function normalizeTrajectory(snapshots, meta, viewRadius = 40) {
 /** Return a log-scaled sphere radius for display. */
 function bodyDisplayRadius(mass, type) {
   if (!mass || mass <= 0) return 0.3;
-  // log10(mass) ranges from ~22 (moon) to ~30 (star)
   const logMass = Math.log10(mass);
   const minLog = 20;
   const maxLog = 32;
   const clamped = Math.max(minLog, Math.min(maxLog, logMass));
   const t = (clamped - minLog) / (maxLog - minLog);
-  // Stars are bigger, planets medium, moons small
   if (type === 'star') return 0.8 + t * 2.0;
   if (type === 'black_hole') return 0.6 + t * 1.8;
   return 0.2 + t * 1.2;
@@ -142,19 +140,13 @@ function AutoRotate({ enabled, speed = 0.3 }) {
 }
 
 // ── Animated Scene ───────────────────────────────────────────────────────────
-function AnimatedScene({
-  snapshots, meta, isFullMode, playbackRef,
-}) {
+function AnimatedScene({ snapshots, meta, isFullMode, playbackRef }) {
   const bodyPositions = useRef({});
   const trailPaths = useRef({});
 
-  // Build full trail paths from all snapshots per body
   const fullTrails = useMemo(() => {
     const trails = {};
-    const names = Object.keys(meta);
-    for (const name of names) {
-      trails[name] = [];
-    }
+    for (const name of Object.keys(meta)) trails[name] = [];
     for (const snap of snapshots) {
       for (const b of snap.bodies) {
         if (!trails[b.name]) trails[b.name] = [];
@@ -172,17 +164,12 @@ function AnimatedScene({
     const snap = snapshots[idx];
     if (!snap) return;
 
-    // Update positions
     const positions = {};
-    for (const b of snap.bodies) {
-      positions[b.name] = [b.x, b.y, b.z];
-    }
+    for (const b of snap.bodies) positions[b.name] = [b.x, b.y, b.z];
     bodyPositions.current = positions;
 
-    // Build partial trails up to current frame
     const partials = {};
-    const names = Object.keys(meta);
-    for (const name of names) {
+    for (const name of Object.keys(meta)) {
       const full = fullTrails[name];
       if (full && full.length > 0) {
         partials[name] = full.slice(0, Math.min(idx + 1, full.length));
@@ -191,21 +178,19 @@ function AnimatedScene({
     trailPaths.current = partials;
   });
 
-  // We need to render bodies — use a component that re-renders via useFrame
-  return <AnimatedBodies
-    meta={meta}
-    bodyPositions={bodyPositions}
-    trailPaths={trailPaths}
-    isFullMode={isFullMode}
-  />;
+  return (
+    <AnimatedBodies
+      meta={meta}
+      bodyPositions={bodyPositions}
+      trailPaths={trailPaths}
+      isFullMode={isFullMode}
+    />
+  );
 }
 
 function AnimatedBodies({ meta, bodyPositions, trailPaths, isFullMode }) {
   const [, forceUpdate] = useState(0);
-
-  useFrame(() => {
-    forceUpdate(c => c + 1);
-  });
+  useFrame(() => forceUpdate(c => c + 1));
 
   const names = Object.keys(meta);
   const positions = bodyPositions.current;
@@ -250,7 +235,7 @@ function PlaybackControls({
   return (
     <div className="viz-controls">
       <button className="viz-play-btn" onClick={onPlayPause} title={isPlaying ? 'Pause' : 'Play'}>
-        {isPlaying ? '⏸' : '▶'}
+        {isPlaying ? '\u23F8' : '\u25B6'}
       </button>
       <div className="viz-time-label">{formatTime(currentTime)}</div>
       <input
@@ -269,7 +254,7 @@ function PlaybackControls({
             className={`viz-speed-btn ${speed === s ? 'active' : ''}`}
             onClick={() => onSpeedChange(s)}
           >
-            {s}×
+            {s}\u00D7
           </button>
         ))}
       </div>
@@ -277,7 +262,13 @@ function PlaybackControls({
   );
 }
 
-// ── Main OrbitVisualizer Component ───────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// Main OrbitVisualizer Component
+//
+// KEY FIX: Uses a SINGLE <Canvas> that is ALWAYS mounted. Mini vs Full mode
+//          is toggled via CSS class on the wrapper div — the canvas DOM node
+//          is never destroyed, so the WebGL context is never lost.
+// ══════════════════════════════════════════════════════════════════════════════
 export default function OrbitVisualizer({ visible, onClose }) {
   const [isFullMode, setIsFullMode] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -316,7 +307,7 @@ export default function OrbitVisualizer({ visible, onClose }) {
     if (visible) fetchTrajectory();
   }, [visible, fetchTrajectory]);
 
-  // Playback animation loop (runs outside React render cycle for performance)
+  // Playback animation loop
   useEffect(() => {
     if (!visible || !trajectoryData || !isPlaying) {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
@@ -327,17 +318,13 @@ export default function OrbitVisualizer({ visible, onClose }) {
     let lastTime = performance.now();
 
     const tick = (now) => {
-      const delta = (now - lastTime) / 1000; // seconds
+      const delta = (now - lastTime) / 1000;
       lastTime = now;
-
-      // advance ~30 frames per second at 1× speed
       const framesPerSec = 30 * speed;
       playbackRef.current.frameIndex += framesPerSec * delta;
-
       if (playbackRef.current.frameIndex >= totalFrames) {
-        playbackRef.current.frameIndex = 0; // loop
+        playbackRef.current.frameIndex = 0;
       }
-
       setCurrentFrame(Math.floor(playbackRef.current.frameIndex));
       animFrameRef.current = requestAnimationFrame(tick);
     };
@@ -360,121 +347,129 @@ export default function OrbitVisualizer({ visible, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [isFullMode, onClose]);
 
+  // Collapse when parent hides
+  useEffect(() => {
+    if (!visible) setIsFullMode(false);
+  }, [visible]);
+
   if (!visible) return null;
 
   const totalFrames = trajectoryData?.snapshots?.length || 0;
   const currentTime = trajectoryData?.snapshots?.[currentFrame]?.time || 0;
-  const totalTime = trajectoryData?.snapshots?.[totalFrames - 1]?.time || 0;
+  const totalTime   = trajectoryData?.snapshots?.[totalFrames - 1]?.time || 0;
 
   const handleScrub = (frame) => {
     playbackRef.current.frameIndex = frame;
     setCurrentFrame(frame);
   };
 
-  // ── Mini mode ──────────────────────────────────────────────────────────
-  if (!isFullMode) {
-    return (
-      <div className="viz-mini" onClick={() => setIsFullMode(true)}>
-        {loading ? (
-          <div className="viz-mini-loading">
-            <div className="inspector-spinner" />
-            <span>Loading trajectory…</span>
-          </div>
-        ) : !trajectoryData ? (
-          <div className="viz-mini-empty">
-            <span>No trajectory data</span>
-          </div>
-        ) : (
-          <>
-            <Canvas
-              camera={{ position: [30, 20, 30], fov: 50 }}
-              style={{ borderRadius: '10px' }}
-              gl={{ antialias: true, alpha: true }}
-            >
-              <color attach="background" args={['#080b12']} />
-              <ambientLight intensity={0.4} />
-              <pointLight position={[0, 0, 0]} intensity={1.5} color="#FFD166" />
-              <Stars radius={80} depth={40} count={800} factor={3} saturation={0.2} fade speed={0.5} />
-              <AutoRotate enabled={true} speed={0.4} />
-              <AnimatedScene
-                snapshots={trajectoryData.snapshots}
-                meta={trajectoryData.meta}
-                isFullMode={false}
-                playbackRef={playbackRef}
-              />
-            </Canvas>
-            <div className="viz-mini-overlay">
-              <span className="viz-mini-label">▶ ORBIT REPLAY</span>
-              <span className="viz-mini-hint">Click to expand</span>
-            </div>
-          </>
-        )}
-      </div>
-    );
-  }
-
-  // ── Full mode ──────────────────────────────────────────────────────────
+  // ────────────────────────────────────────────────────────────────────────
+  // Render: One wrapper, one Canvas. The wrapper class toggles mini ↔ full.
+  // ────────────────────────────────────────────────────────────────────────
   return (
-    <div className="viz-full-overlay" onClick={(e) => {
-      if (e.target === e.currentTarget) setIsFullMode(false);
-    }}>
-      <div className="viz-full-container">
-        {/* Header */}
-        <div className="viz-full-header">
-          <span className="viz-full-title">⚛ ORBIT VISUALIZER</span>
-          <div className="viz-header-actions">
-            <button className="viz-minimize-btn" onClick={() => setIsFullMode(false)} title="Minimize">
-              ▼
-            </button>
-            <button className="viz-close-btn" onClick={onClose} title="Close">
-              ✕
-            </button>
-          </div>
-        </div>
+    <>
+      {/* Dark backdrop — only visible in full mode */}
+      {isFullMode && (
+        <div
+          className="viz-backdrop"
+          onClick={() => setIsFullMode(false)}
+        />
+      )}
 
-        {/* 3D Canvas */}
+      {/* Single persistent panel */}
+      <div className={isFullMode ? 'viz-panel viz-panel--full' : 'viz-panel viz-panel--mini'}>
+        {/* Header (full mode only) */}
+        {isFullMode && (
+          <div className="viz-full-header">
+            <span className="viz-full-title">{'\u269B'} ORBIT VISUALIZER</span>
+            <div className="viz-header-actions">
+              <button className="viz-minimize-btn" onClick={() => setIsFullMode(false)} title="Minimize">
+                {'\u25BC'}
+              </button>
+              <button className="viz-close-btn" onClick={onClose} title="Close">
+                {'\u2715'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Canvas area — ALWAYS renders the same Canvas */}
         <div className="viz-canvas-wrapper">
           {loading ? (
             <div className="viz-loading-full">
               <div className="inspector-spinner" />
-              <span>Loading trajectory data…</span>
+              <span>Loading trajectory data...</span>
             </div>
           ) : !trajectoryData ? (
             <div className="viz-loading-full">
-              <span>No trajectory available. Run a simulation with <code>visualize=on</code> first.</span>
+              <span>
+                {isFullMode
+                  ? 'No trajectory available. Run a simulation with visualize=on first.'
+                  : 'No trajectory data'}
+              </span>
             </div>
           ) : (
             <Canvas
-              camera={{ position: [45, 30, 45], fov: 50 }}
-              gl={{ antialias: true, alpha: true }}
+              camera={{ position: [30, 20, 30], fov: 50 }}
+              gl={{
+                antialias: true,
+                alpha: true,
+                powerPreference: 'high-performance',
+                preserveDrawingBuffer: true,
+              }}
+              resize={{ debounce: 0 }}
+              onCreated={({ gl }) => {
+                gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+              }}
             >
               <color attach="background" args={['#060910']} />
-              <ambientLight intensity={0.35} />
-              <pointLight position={[0, 0, 0]} intensity={2} color="#FFD166" />
-              <directionalLight position={[20, 30, 10]} intensity={0.3} />
-              <Stars radius={100} depth={50} count={2000} factor={4} saturation={0.3} fade speed={0.3} />
-              <OrbitControls
-                enablePan={true}
-                enableZoom={true}
-                enableRotate={true}
-                dampingFactor={0.1}
-                enableDamping
-                minDistance={5}
-                maxDistance={200}
+              <ambientLight intensity={0.4} />
+              <pointLight position={[0, 0, 0]} intensity={1.8} color="#FFD166" />
+              {isFullMode && <directionalLight position={[20, 30, 10]} intensity={0.3} />}
+              <Stars
+                radius={isFullMode ? 100 : 80}
+                depth={isFullMode ? 50 : 40}
+                count={isFullMode ? 2000 : 800}
+                factor={isFullMode ? 4 : 3}
+                saturation={0.3}
+                fade
+                speed={0.4}
               />
-              <gridHelper args={[100, 20, '#1a2030', '#101620']} position={[0, -15, 0]} />
+              <AutoRotate enabled={!isFullMode} speed={0.4} />
+              {isFullMode && (
+                <OrbitControls
+                  enablePan
+                  enableZoom
+                  enableRotate
+                  dampingFactor={0.1}
+                  enableDamping
+                  minDistance={5}
+                  maxDistance={200}
+                />
+              )}
+              {isFullMode && (
+                <gridHelper args={[100, 20, '#1a2030', '#101620']} position={[0, -15, 0]} />
+              )}
               <AnimatedScene
                 snapshots={trajectoryData.snapshots}
                 meta={trajectoryData.meta}
-                isFullMode={true}
+                isFullMode={isFullMode}
                 playbackRef={playbackRef}
               />
             </Canvas>
           )}
         </div>
 
-        {/* Playback Controls */}
-        {trajectoryData && totalFrames > 0 && (
+        {/* Mini overlay (click to expand) */}
+        {!isFullMode && trajectoryData && (
+          <div className="viz-mini-overlay" onClick={() => setIsFullMode(true)}>
+            <span className="viz-mini-label">{'\u25B6'} ORBIT REPLAY</span>
+            <span className="viz-mini-hint">Click to expand</span>
+          </div>
+        )}
+
+        {/* Full-mode playback controls */}
+        {isFullMode && trajectoryData && totalFrames > 0 && (
           <PlaybackControls
             currentFrame={currentFrame}
             totalFrames={totalFrames}
@@ -488,6 +483,6 @@ export default function OrbitVisualizer({ visible, onClose }) {
           />
         )}
       </div>
-    </div>
+    </>
   );
 }
